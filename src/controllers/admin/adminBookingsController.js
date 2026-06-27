@@ -219,4 +219,65 @@ const exportBookings = async (req, res) => {
   }
 };
 
-module.exports = { getAllBookings, getBookingDetail, createOfflineBooking, exportBookings };
+// PATCH /api/admin/bookings/:id/status
+const updateBookingStatus = async (req, res) => {
+  try {
+    const { status, amountPaid, notes } = req.body;
+    const allowed = ['pending', 'confirmed', 'active', 'completed', 'cancelled'];
+    if (status && !allowed.includes(status)) {
+      return res.status(400).json({ success: false, message: 'Invalid status' });
+    }
+    const update = {};
+    if (status) update.status = status;
+    if (amountPaid !== undefined) update.amountPaid = amountPaid;
+    if (notes !== undefined) update.challanDetails = notes;
+
+    const booking = await Booking.findByIdAndUpdate(req.params.id, { $set: update }, { new: true })
+      .populate('userId', 'name mobile email')
+      .populate('carId', 'name registrationNo type')
+      .populate('cityId', 'name');
+
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+    return res.json({ success: true, data: booking });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to update booking' });
+  }
+};
+
+// PUT /api/admin/bookings/:id — update dates, amount, notes
+const updateBooking = async (req, res) => {
+  try {
+    const { startTime, endTime, totalAmount, amountPaid, notes, paymentMode } = req.body;
+    const update = {};
+    if (startTime) update.startTime = new Date(startTime);
+    if (endTime)   update.endTime   = new Date(endTime);
+    if (totalAmount !== undefined) {
+      update.totalAmount = totalAmount;
+      update.balanceDue  = totalAmount - (amountPaid !== undefined ? amountPaid : 0);
+    }
+    if (amountPaid !== undefined) {
+      update.amountPaid = amountPaid;
+      if (update.totalAmount !== undefined) {
+        update.balanceDue = update.totalAmount - amountPaid;
+      } else {
+        // recalculate balanceDue using existing totalAmount
+        const existing = await Booking.findById(req.params.id, 'totalAmount');
+        if (existing) update.balanceDue = existing.totalAmount - amountPaid;
+      }
+    }
+    if (notes !== undefined)       update.challanDetails = notes;
+    if (paymentMode !== undefined) update.paymentMode    = paymentMode;
+
+    const booking = await Booking.findByIdAndUpdate(req.params.id, { $set: update }, { new: true })
+      .populate('userId', 'name mobile email')
+      .populate('carId', 'name registrationNo type')
+      .populate('cityId', 'name');
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+    return res.json({ success: true, data: booking });
+  } catch (error) {
+    console.error('admin updateBooking error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to update booking' });
+  }
+};
+
+module.exports = { getAllBookings, getBookingDetail, createOfflineBooking, exportBookings, updateBookingStatus, updateBooking };

@@ -5,6 +5,8 @@ const {
   getBookingDetail,
   createOfflineBooking,
   exportBookings,
+  updateBookingStatus,
+  updateBooking,
 } = require('../../controllers/admin/adminBookingsController');
 const { protectAdmin } = require('../../middleware/adminAuth');
 
@@ -14,5 +16,7 @@ router.get('/export', exportBookings);
 router.get('/', getAllBookings);
 router.post('/offline', createOfflineBooking);
 router.get('/:id', getBookingDetail);
+router.patch('/:id/status', updateBookingStatus);
+router.put('/:id', updateBooking);
 
 module.exports = router;

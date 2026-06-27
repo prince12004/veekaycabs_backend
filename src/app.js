@@ -36,7 +36,14 @@ const adminAdminsRoutes = require('./routes/admin/admins');
 const adminTempoRoutes = require('./routes/admin/tempo');
 const adminTempoBookingsRoutes = require('./routes/admin/tempoBookings');
 const adminTempoSeoRoutes = require('./routes/admin/tempoSeo');
+const adminSettingsRoutes = require('./routes/admin/settings');
+const adminSliderRoutes = require('./routes/admin/slider');
+const adminTestimonialsRoutes = require('./routes/admin/testimonials');
+const adminOffersRoutes = require('./routes/admin/offers');
+const adminPolicyRoutes = require('./routes/admin/policy');
 const tempoRoutes = require('./routes/tempo');
+const favoritesRoutes = require('./routes/favorites');
+const publicRoutes = require('./routes/public');
 
 const app = express();
 
@@ -81,6 +88,8 @@ app.use('/api/blogs', blogsRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/cities', citiesRoutes);
 app.use('/api/tempo', tempoRoutes);
+app.use('/api/favorites', favoritesRoutes);
+app.use('/api/public', publicRoutes);
 
 // Admin routes (separate tighter rate limit from public API)
 app.use('/api/admin', adminLimiter);
@@ -98,6 +107,11 @@ app.use('/api/admin/admins', adminAdminsRoutes);
 app.use('/api/admin/tempo', adminTempoRoutes);
 app.use('/api/admin/tempo-bookings', adminTempoBookingsRoutes);
 app.use('/api/admin/tempo-seo', adminTempoSeoRoutes);
+app.use('/api/admin/settings', adminSettingsRoutes);
+app.use('/api/admin/slider', adminSliderRoutes);
+app.use('/api/admin/testimonials', adminTestimonialsRoutes);
+app.use('/api/admin/offers', adminOffersRoutes);
+app.use('/api/admin/policy', adminPolicyRoutes);
 
 // Health check
 app.get('/health', (req, res) =>
