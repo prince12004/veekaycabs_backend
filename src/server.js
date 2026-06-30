@@ -75,7 +75,9 @@ const startServer = async () => {
     console.log(`\nVeekay Cabs Server running on port ${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV}`);
     console.log(`Frontend URL: ${process.env.FRONTEND_URL}`);
-    console.log(`Health: http://localhost:${PORT}/health\n`);
+    console.log(`Health: http://localhost:${PORT}/health`);
+    const smsKey = process.env.YOURBULKSMS_AUTH_KEY || '';
+    console.log(`SMS: ${smsKey && smsKey !== 'placeholder' ? `✓ key=${smsKey.slice(0,6)}... (${smsKey.length} chars)` : '✗ NOT configured'}\n`);
   });
 };
 

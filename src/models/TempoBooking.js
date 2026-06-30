@@ -17,6 +17,7 @@ const TempoBookingSchema = new mongoose.Schema({
   totalAmount: { type: Number, required: true },
   tokenAmount: { type: Number, required: true },
   balanceDue: { type: Number, required: true },
+  securityDeposit: { type: Number, default: 0 },
   amountPaid: { type: Number, default: 0 },
   paymentMode: {
     type: String,

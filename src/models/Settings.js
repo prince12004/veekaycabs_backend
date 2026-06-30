@@ -38,6 +38,9 @@ const SettingsSchema = new mongoose.Schema({
   includedKmPerDay: { type: Number, default: 250 },
   extraKmRate:      { type: Number, default: 12 },
 
+  // Charges
+  doorstepDeliveryCharge: { type: Number, default: 500 },
+
   // Feature flags
   maintenanceMode: { type: Boolean, default: false },
   bookingEnabled:  { type: Boolean, default: true },

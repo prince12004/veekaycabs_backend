@@ -1,4 +1,5 @@
 const Car = require('../../models/Car');
+const { getFileUrl } = require('../../middleware/upload');
 
 // GET /api/admin/cars
 const getAllCars = async (req, res) => {
@@ -29,22 +30,36 @@ const getAllCars = async (req, res) => {
   }
 };
 
+// GET /api/admin/cars/:id
+const getCarById = async (req, res) => {
+  try {
+    const car = await Car.findById(req.params.id).populate('cityId', 'name slug');
+    if (!car) return res.status(404).json({ success: false, message: 'Car not found' });
+    return res.json({ success: true, data: car });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to fetch car' });
+  }
+};
+
 // POST /api/admin/cars
 const createCar = async (req, res) => {
   try {
     const {
       name, registrationNo, modelYear, type, fuel, transmission,
-      seats, regularPrice, weekendPrice, securityDeposit, kmPackage,
+      seats, regularPrice, weekendPrice, securityDeposit, doorstepDeliveryCharge, kmPackage,
       cityId, gpsDeviceId, features,
     } = req.body;
 
-    // Handle uploaded images
-    const images = req.files?.map((f) => f.location || `/uploads/${f.filename}`) || [];
+    const images = (req.files || []).map(getFileUrl).filter(Boolean);
+    let documents = {};
+    if (req.body.documents) {
+      try { documents = JSON.parse(req.body.documents); } catch {}
+    }
 
     const car = await Car.create({
       name, registrationNo, modelYear, type, fuel, transmission,
-      seats, regularPrice, weekendPrice, securityDeposit, kmPackage,
-      cityId, gpsDeviceId, images,
+      seats, regularPrice, weekendPrice, securityDeposit, doorstepDeliveryCharge, kmPackage,
+      cityId, gpsDeviceId, images, documents,
       features: typeof features === 'string' ? JSON.parse(features) : features || [],
     });
 
@@ -62,26 +77,45 @@ const createCar = async (req, res) => {
 // PUT /api/admin/cars/:id
 const updateCar = async (req, res) => {
   try {
+    const existing = await Car.findById(req.params.id);
+    if (!existing) return res.status(404).json({ success: false, message: 'Car not found' });
+
     const allowedFields = [
-      'name', 'modelYear', 'type', 'fuel', 'transmission', 'seats',
-      'regularPrice', 'weekendPrice', 'securityDeposit', 'kmPackage',
+      'name', 'registrationNo', 'modelYear', 'type', 'fuel', 'transmission', 'seats',
+      'regularPrice', 'weekendPrice', 'securityDeposit', 'doorstepDeliveryCharge', 'kmPackage',
       'cityId', 'gpsDeviceId', 'features', 'documents', 'isActive',
     ];
     const updates = {};
     allowedFields.forEach((field) => {
-      if (req.body[field] !== undefined) updates[field] = req.body[field];
+      if (req.body[field] !== undefined) {
+        if (field === 'documents' && typeof req.body[field] === 'string') {
+          try { updates[field] = JSON.parse(req.body[field]); } catch {}
+        } else {
+          updates[field] = req.body[field];
+        }
+      }
     });
 
-    if (req.files?.length > 0) {
-      const newImages = req.files.map((f) => f.location || `/uploads/${f.filename}`);
-      updates.$push = { images: { $each: newImages } };
+    let removeImages = [];
+    if (req.body.removeImages) {
+      try { removeImages = JSON.parse(req.body.removeImages); } catch {}
+    }
+    const newImages = (req.files || []).map(getFileUrl).filter(Boolean);
+
+    if (removeImages.length > 0 || newImages.length > 0) {
+      const finalImages = existing.images
+        .filter((img) => !removeImages.includes(img))
+        .concat(newImages);
+
+      if (finalImages.length === 0) {
+        return res.status(400).json({ success: false, message: 'At least one image is required' });
+      }
+      updates.images = finalImages;
     }
 
     const car = await Car.findByIdAndUpdate(req.params.id, updates, {
       new: true, runValidators: true,
     }).populate('cityId', 'name slug');
-
-    if (!car) return res.status(404).json({ success: false, message: 'Car not found' });
 
     return res.json({ success: true, data: car });
   } catch (error) {
@@ -167,4 +201,36 @@ const getExpiryAlerts = async (req, res) => {
   }
 };
 
-module.exports = { getAllCars, createCar, updateCar, deleteCar, toggleCarStatus, getExpiryAlerts };
+// PATCH /api/admin/cars/:id/documents/:docType
+const uploadCarDocument = async (req, res) => {
+  try {
+    const { id, docType } = req.params;
+    const allowed = ['rc', 'insurance', 'puc', 'fitness', 'roadTax'];
+    if (!allowed.includes(docType)) {
+      return res.status(400).json({ success: false, message: 'Invalid doc type' });
+    }
+
+    const car = await Car.findById(id);
+    if (!car) return res.status(404).json({ success: false, message: 'Car not found' });
+
+    if (!car.documents) car.documents = {};
+    if (!car.documents[docType]) car.documents[docType] = {};
+
+    if (req.file) {
+      car.documents[docType].url = getFileUrl(req.file);
+    }
+    if (req.body.expiry) {
+      car.documents[docType].expiry = new Date(req.body.expiry);
+    }
+
+    car.markModified('documents');
+    await car.save();
+
+    return res.json({ success: true, data: car.documents });
+  } catch (error) {
+    console.error('uploadCarDocument error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to upload document' });
+  }
+};
+
+module.exports = { getAllCars, getCarById, createCar, updateCar, deleteCar, toggleCarStatus, getExpiryAlerts, uploadCarDocument };

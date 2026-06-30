@@ -80,4 +80,40 @@ const toggleBlockUser = async (req, res) => {
   }
 };
 
-module.exports = { getAllUsers, getUserDetail, toggleBlockUser };
+// PUT /api/admin/users/:id — admin edits user details
+const updateUser = async (req, res) => {
+  try {
+    const { name, email, mobile, address } = req.body;
+    const updates = {};
+    if (name  !== undefined) updates.name    = String(name).trim();
+    if (email !== undefined) updates.email   = String(email).toLowerCase().trim();
+    if (address !== undefined) updates.address = String(address).trim();
+    if (mobile !== undefined) {
+      const cleaned = String(mobile).replace(/\D/g, '');
+      if (!/^\d{10}$/.test(cleaned)) {
+        return res.status(400).json({ success: false, message: 'Enter a valid 10-digit mobile number' });
+      }
+      updates.mobile = cleaned;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ success: false, message: 'No fields to update' });
+    }
+
+    const user = await User.findByIdAndUpdate(req.params.id, { $set: updates }, {
+      new: true, runValidators: true,
+    }).select('-refreshToken');
+
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    return res.json({ success: true, data: user, message: 'User updated successfully' });
+  } catch (error) {
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyValue || {})[0] || 'field';
+      return res.status(400).json({ success: false, message: `${field} already in use` });
+    }
+    console.error('admin updateUser error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to update user' });
+  }
+};
+
+module.exports = { getAllUsers, getUserDetail, toggleBlockUser, updateUser };

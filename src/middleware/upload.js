@@ -1,40 +1,51 @@
 const multer = require('multer');
-const multerS3 = require('multer-s3');
-const { S3Client } = require('@aws-sdk/client-s3');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 
-const s3 = new S3Client({
-  region: process.env.AWS_REGION || 'ap-south-1',
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  },
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+const ALLOWED_IMAGE_FORMATS = ['jpg', 'jpeg', 'png', 'webp', 'pdf'];
+const ALLOWED_VIDEO_FORMATS = ['mp4', 'mov', 'avi', 'webm', 'mkv'];
+const ALLOWED_FORMATS = [...ALLOWED_IMAGE_FORMATS, ...ALLOWED_VIDEO_FORMATS];
+
 const fileFilter = (req, file, cb) => {
-  const allowed = ['.jpg', '.jpeg', '.png', '.webp', '.pdf'];
-  const ext = path.extname(file.originalname).toLowerCase();
-  if (allowed.includes(ext)) {
+  const ext = path.extname(file.originalname).toLowerCase().replace('.', '');
+  if (ALLOWED_FORMATS.includes(ext)) {
     cb(null, true);
   } else {
-    cb(new Error('Only images and PDFs are allowed'), false);
+    cb(new Error('Only images (jpg, png, webp), PDFs, and videos (mp4, mov) are allowed'), false);
   }
 };
 
-const uploadToS3 = (folder) =>
+const isCloudinaryConfigured = () =>
+  process.env.CLOUDINARY_CLOUD_NAME &&
+  process.env.CLOUDINARY_CLOUD_NAME !== 'placeholder' &&
+  process.env.CLOUDINARY_API_KEY &&
+  process.env.CLOUDINARY_API_KEY !== 'placeholder';
+
+const uploadToCloudinary = (folder) =>
   multer({
-    storage: multerS3({
-      s3,
-      bucket: process.env.AWS_BUCKET_NAME,
-      metadata: (req, file, cb) => cb(null, { fieldName: file.fieldname }),
-      key: (req, file, cb) => {
-        const ext = path.extname(file.originalname);
-        cb(null, `${folder}/${uuidv4()}${ext}`);
+    storage: new CloudinaryStorage({
+      cloudinary,
+      params: (req, file) => {
+        const isVideo = file.mimetype.startsWith('video/');
+        const isPdf   = file.mimetype === 'application/pdf';
+        return {
+          folder: `veekaycabs/${folder}`,
+          public_id: uuidv4(),
+          resource_type: isVideo ? 'video' : isPdf ? 'raw' : 'image',
+          allowed_formats: isVideo ? ALLOWED_VIDEO_FORMATS : ALLOWED_IMAGE_FORMATS,
+        };
       },
     }),
     fileFilter,
-    limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+    limits: { fileSize: 10 * 1024 * 1024 },
   });
 
 const uploadToDisk = (folder) =>
@@ -51,13 +62,19 @@ const uploadToDisk = (folder) =>
   });
 
 const getUploader = (folder) => {
-  if (
-    process.env.AWS_ACCESS_KEY_ID &&
-    process.env.AWS_ACCESS_KEY_ID !== 'placeholder'
-  ) {
-    return uploadToS3(folder);
+  if (isCloudinaryConfigured()) {
+    return uploadToCloudinary(folder);
   }
   return uploadToDisk(folder);
 };
 
-module.exports = { getUploader };
+// Extract URL from an uploaded file — handles Cloudinary, S3, and disk storage
+const getFileUrl = (file) => {
+  if (!file) return null;
+  if (file.path && file.path.startsWith('http')) return file.path; // Cloudinary secure_url
+  if (file.location) return file.location;                          // S3 (legacy)
+  if (file.filename) return `/uploads/${file.filename}`;            // local disk
+  return null;
+};
+
+module.exports = { getUploader, getFileUrl };

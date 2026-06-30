@@ -9,6 +9,7 @@ const BookingSchema = new mongoose.Schema({
   endTime: { type: Date, required: true },
   pickupLocation: { type: String, required: true },
   doorstepDelivery: { type: Boolean, default: false },
+  deliveryAddress: { type: String },
   doorstepCharge: { type: Number, default: 0 },
   bookingFare: { type: Number, required: true },
   securityDeposit: { type: Number, default: 10000 },
@@ -40,6 +41,28 @@ const BookingSchema = new mongoose.Schema({
   odometerEnd: { type: Number },
   extraKmCharge: { type: Number, default: 0 },
   challanDetails: { type: String },
+  dentDetectionResult: {
+    newDamageFound: { type: Boolean },
+    damageCount: { type: Number },
+    damages: [{
+      location: { type: String },
+      type: { type: String },
+      severity: { type: String },
+      description: { type: String },
+    }],
+    partsChecked: [{
+      part: { type: String },
+      pickupStatus: { type: String, enum: ['ok', 'minor_mark', 'damaged', 'not_visible'] },
+      returnStatus: { type: String, enum: ['ok', 'minor_mark', 'damaged', 'not_visible'] },
+      newDamage: { type: Boolean, default: false },
+      lowConfidence: { type: Boolean, default: false },
+      note: { type: String },
+    }],
+    summary: { type: String },
+    confidenceNote: { type: String },
+    analyzedAt: { type: Date },
+    model: { type: String },
+  },
 }, { timestamps: true });
 
 BookingSchema.index({ userId: 1, status: 1 });

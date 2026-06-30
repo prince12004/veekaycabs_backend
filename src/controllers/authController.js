@@ -52,7 +52,9 @@ const sendOtp = async (req, res) => {
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     await storeOtp(mobile, otp);
-    await sendOtpSms(mobile, otp);
+    const smsResult = await sendOtpSms(mobile, otp);
+    // Always log OTP so admin can verify if SMS delivery fails
+    console.log(`\n========== OTP ==========\nMobile : ${mobile}\nOTP    : ${otp}\nSMS    : ${smsResult.success ? 'Sent ✓' : 'FAILED — ' + smsResult.error}\n=========================\n`);
 
     return res.json({ success: true, message: 'OTP sent successfully' });
   } catch (error) {

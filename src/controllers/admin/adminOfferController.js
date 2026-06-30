@@ -1,4 +1,5 @@
 const Offer = require('../../models/Offer');
+const { getFileUrl } = require('../../middleware/upload');
 
 const getAll = async (req, res) => {
   try {
@@ -17,7 +18,7 @@ const create = async (req, res) => {
       title, description, couponCode, discountPct: Number(discountPct) || 0,
       validUntil: validUntil || undefined, linkUrl, displayPage,
       sortOrder: Number(sortOrder) || 0,
-      imageUrl: req.file?.path || '',
+      imageUrl: getFileUrl(req.file) || '',
     });
     return res.status(201).json({ success: true, data: offer });
   } catch (e) {
@@ -30,7 +31,7 @@ const update = async (req, res) => {
     const offer = await Offer.findById(req.params.id);
     if (!offer) return res.status(404).json({ success: false, message: 'Offer not found' });
     Object.assign(offer, req.body);
-    if (req.file?.path) offer.imageUrl = req.file.path;
+    const newUrl = getFileUrl(req.file); if (newUrl) offer.imageUrl = newUrl;
     if (req.body.isActive !== undefined) offer.isActive = req.body.isActive === 'true' || req.body.isActive === true;
     if (req.body.discountPct) offer.discountPct = Number(req.body.discountPct);
     await offer.save();

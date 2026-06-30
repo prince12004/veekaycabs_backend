@@ -29,7 +29,7 @@ exports.createTempoBooking = async (req, res) => {
     const {
       tempoId, tripType, pickupCity, destination, pickupLocation,
       startTime, endTime, totalDays, passengers,
-      baseFare, gst, totalAmount, tokenAmount, balanceDue, paymentMode,
+      baseFare, gst, totalAmount, tokenAmount, balanceDue, securityDeposit, paymentMode,
     } = req.body;
 
     const booking = new TempoBooking({
@@ -38,6 +38,7 @@ exports.createTempoBooking = async (req, res) => {
       startTime, endTime, totalDays, passengers: passengers || 1,
       baseFare, gst: gst || 0, totalAmount,
       tokenAmount, balanceDue,
+      securityDeposit: securityDeposit || 0,
       paymentMode: paymentMode || 'online',
       status: 'pending',
     });

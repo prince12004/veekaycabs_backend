@@ -1,6 +1,7 @@
 const UserDocument = require('../models/UserDocument');
 const User = require('../models/User');
 const { sendEmail } = require('../services/email');
+const { getFileUrl } = require('../middleware/upload');
 
 // GET /api/documents/my
 const getMyDocuments = async (req, res) => {
@@ -29,8 +30,7 @@ const uploadDocument = async (req, res) => {
       return res.status(400).json({ success: false, message: 'No file uploaded' });
     }
 
-    // Determine file URL (S3 gives location, disk gives path)
-    const fileUrl = file.location || `/uploads/${file.filename}`;
+    const fileUrl = getFileUrl(file);
 
     let docs = await UserDocument.findOne({ userId: req.user._id });
     if (!docs) {

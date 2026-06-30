@@ -2,6 +2,7 @@ const Booking = require('../../models/Booking');
 const Car = require('../../models/Car');
 const User = require('../../models/User');
 const { v4: uuidv4 } = require('uuid');
+const { sendBookingConfirmedToUser, notifyAdminNewBooking, sendBookingCancelledToUser } = require('../../services/whatsapp');
 
 const generateBookingId = () => {
   const ts = Date.now().toString().slice(-6);
@@ -12,11 +13,13 @@ const generateBookingId = () => {
 // GET /api/admin/bookings
 const getAllBookings = async (req, res) => {
   try {
-    const { status, city, from, to, page = 1, limit = 20, search } = req.query;
+    const { status, city, from, to, page = 1, limit = 20, search, isOffline } = req.query;
     const filter = {};
 
     if (status) filter.status = status;
     if (city) filter.cityId = city;
+    if (isOffline === 'true') filter.isOffline = true;
+    if (isOffline === 'false') filter.isOffline = { $ne: true };
     if (from || to) {
       filter.createdAt = {};
       if (from) filter.createdAt.$gte = new Date(from);
@@ -155,6 +158,12 @@ const createOfflineBooking = async (req, res) => {
       .populate('carId', 'name registrationNo')
       .populate('cityId', 'name');
 
+    // Send WhatsApp confirmation for offline bookings too
+    const offlineMobile = populated.userId?.mobile;
+    if (offlineMobile && !String(offlineMobile).startsWith('google_')) {
+      sendBookingConfirmedToUser(populated.userId, populated, populated.carId).catch(() => {});
+    }
+
     return res.status(201).json({ success: true, data: populated });
   } catch (error) {
     console.error('admin createOfflineBooking error:', error);
@@ -238,6 +247,19 @@ const updateBookingStatus = async (req, res) => {
       .populate('cityId', 'name');
 
     if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+
+    // Send WhatsApp when admin confirms or cancels a booking
+    const userMobile = booking.userId?.mobile;
+    const hasRealMobile = userMobile && !String(userMobile).startsWith('google_');
+    if (hasRealMobile) {
+      if (status === 'confirmed' || status === 'active') {
+        const car = booking.carId;
+        sendBookingConfirmedToUser(booking.userId, booking, car).catch(() => {});
+      } else if (status === 'cancelled') {
+        sendBookingCancelledToUser(booking.userId, booking, booking.carId).catch(() => {});
+      }
+    }
+
     return res.json({ success: true, data: booking });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Failed to update booking' });

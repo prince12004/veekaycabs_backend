@@ -1,4 +1,5 @@
 const Blog = require('../../models/Blog');
+const { getFileUrl } = require('../../middleware/upload');
 
 // GET /api/admin/blogs
 const getAllBlogs = async (req, res) => {
@@ -40,7 +41,7 @@ const createBlog = async (req, res) => {
       title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') +
       '-' + Date.now().toString().slice(-4);
 
-    const coverImage = req.file?.location || (req.file ? `/uploads/${req.file.filename}` : rest.coverImage);
+    const coverImage = getFileUrl(req.file) || rest.coverImage;
 
     const blog = await Blog.create({ title, slug, ...rest, coverImage });
     return res.status(201).json({ success: true, data: blog });
@@ -58,7 +59,7 @@ const updateBlog = async (req, res) => {
   try {
     const updates = { ...req.body };
     if (req.file) {
-      updates.coverImage = req.file.location || `/uploads/${req.file.filename}`;
+      updates.coverImage = getFileUrl(req.file);
     }
 
     const blog = await Blog.findByIdAndUpdate(req.params.id, updates, {

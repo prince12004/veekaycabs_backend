@@ -1,4 +1,5 @@
 const Slider = require('../../models/Slider');
+const { getFileUrl } = require('../../middleware/upload');
 
 const getAll = async (req, res) => {
   try {
@@ -13,7 +14,7 @@ const create = async (req, res) => {
   try {
     const { title, subtitle, linkUrl, linkText, displayPage, sortOrder } = req.body;
     if (!title) return res.status(400).json({ success: false, message: 'Title required' });
-    const imageUrl = req.file?.path || req.body.imageUrl || '';
+    const imageUrl = getFileUrl(req.file) || req.body.imageUrl || '';
     if (!imageUrl) return res.status(400).json({ success: false, message: 'Image required' });
     const slide = await Slider.create({ title, subtitle, imageUrl, linkUrl, linkText, displayPage, sortOrder: Number(sortOrder) || 0 });
     return res.status(201).json({ success: true, data: slide });
@@ -34,7 +35,8 @@ const update = async (req, res) => {
     if (displayPage !== undefined) slide.displayPage = displayPage;
     if (sortOrder !== undefined) slide.sortOrder = Number(sortOrder);
     if (isActive !== undefined) slide.isActive = isActive === 'true' || isActive === true;
-    if (req.file?.path) slide.imageUrl = req.file.path;
+    const newUrl = getFileUrl(req.file);
+    if (newUrl) slide.imageUrl = newUrl;
     await slide.save();
     return res.json({ success: true, data: slide });
   } catch (e) {

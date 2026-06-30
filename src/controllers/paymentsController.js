@@ -1,11 +1,12 @@
 const Booking = require('../models/Booking');
+const TempoBooking = require('../models/TempoBooking');
 const Coupon = require('../models/Coupon');
 const Refund = require('../models/Refund');
 const User = require('../models/User');
 const { createOrder, verifyPaymentSignature, verifyWebhookSignature, createRefund } = require('../services/razorpay');
 const { sendBookingConfirmation } = require('../services/email');
 const { sendBookingConfirmationSms } = require('../services/sms');
-const { notifyAdminNewBooking } = require('../services/whatsapp');
+const { notifyAdminNewBooking, sendBookingConfirmedToUser } = require('../services/whatsapp');
 
 // POST /api/payments/create-order
 const createPaymentOrder = async (req, res) => {
@@ -38,7 +39,7 @@ const createPaymentOrder = async (req, res) => {
 // POST /api/payments/verify
 const verifyPayment = async (req, res) => {
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, bookingId } = req.body;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, bookingId, type } = req.body;
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       return res.status(400).json({ success: false, message: 'Payment details are required' });
@@ -49,7 +50,25 @@ const verifyPayment = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Payment verification failed' });
     }
 
-    // Find booking by orderId or bookingId
+    // ── Tempo Booking payment ─────────────────────────────────────────────────
+    if (type === 'tempo') {
+      const tempoBooking = await TempoBooking.findById(bookingId).populate('userId');
+      if (!tempoBooking) {
+        return res.status(404).json({ success: false, message: 'Tempo booking not found' });
+      }
+      tempoBooking.razorpayPaymentId = razorpay_payment_id;
+      tempoBooking.amountPaid = tempoBooking.tokenAmount;
+      tempoBooking.status = 'confirmed';
+      await tempoBooking.save();
+      await User.findByIdAndUpdate(tempoBooking.userId, { $inc: { totalBookings: 1 } });
+      return res.json({
+        success: true,
+        message: 'Tempo booking confirmed!',
+        data: { bookingId: tempoBooking.bookingId, status: tempoBooking.status },
+      });
+    }
+
+    // ── Car Rental Booking payment ─────────────────────────────────────────────
     let booking;
     if (bookingId) {
       booking = await Booking.findOne({ bookingId }).populate('carId').populate('userId');
@@ -81,6 +100,7 @@ const verifyPayment = async (req, res) => {
     try {
       if (user?.email) await sendBookingConfirmation(user, booking, car);
       if (user?.mobile) await sendBookingConfirmationSms(user.mobile, booking.bookingId, car.name);
+      if (user?.mobile) await sendBookingConfirmedToUser(user, booking, car);
       await notifyAdminNewBooking(booking);
     } catch (notifyErr) {
       console.error('Notification error (non-fatal):', notifyErr.message);

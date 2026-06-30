@@ -1,4 +1,5 @@
 const Testimonial = require('../../models/Testimonial');
+const { getFileUrl } = require('../../middleware/upload');
 
 const getAll = async (req, res) => {
   try {
@@ -18,7 +19,7 @@ const create = async (req, res) => {
     const t = await Testimonial.create({
       name, city, rating: Number(rating) || 5, review, carBooked, source,
       showOnHome: showOnHome !== 'false', sortOrder: Number(sortOrder) || 0,
-      avatarUrl: req.file?.path || '',
+      avatarUrl: getFileUrl(req.file) || '',
     });
     return res.status(201).json({ success: true, data: t });
   } catch (e) {
@@ -31,7 +32,7 @@ const update = async (req, res) => {
     const t = await Testimonial.findById(req.params.id);
     if (!t) return res.status(404).json({ success: false, message: 'Not found' });
     Object.assign(t, req.body);
-    if (req.file?.path) t.avatarUrl = req.file.path;
+    const newUrl = getFileUrl(req.file); if (newUrl) t.avatarUrl = newUrl;
     if (req.body.isActive !== undefined) t.isActive = req.body.isActive === 'true' || req.body.isActive === true;
     if (req.body.showOnHome !== undefined) t.showOnHome = req.body.showOnHome === 'true' || req.body.showOnHome === true;
     if (req.body.rating) t.rating = Number(req.body.rating);

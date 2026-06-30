@@ -1,4 +1,5 @@
 const TempoTraveller = require('../../models/TempoTraveller');
+const { getFileUrl } = require('../../middleware/upload');
 
 exports.getAllTempos = async (req, res) => {
   try {
@@ -21,7 +22,7 @@ exports.getTempoById = async (req, res) => {
 
 exports.createTempo = async (req, res) => {
   try {
-    const images = req.files ? req.files.map(f => f.location || `/uploads/${f.filename}`) : [];
+    const images = (req.files || []).map(getFileUrl).filter(Boolean);
     const tempo = new TempoTraveller({ ...req.body, images });
     await tempo.save();
     res.status(201).json({ success: true, data: tempo, message: 'Tempo Traveller added successfully' });
@@ -40,7 +41,7 @@ exports.updateTempo = async (req, res) => {
 
     const updates = { ...req.body };
     if (req.files && req.files.length > 0) {
-      updates.images = req.files.map(f => f.location || `/uploads/${f.filename}`);
+      updates.images = req.files.map(getFileUrl).filter(Boolean);
     }
     Object.assign(tempo, updates);
     await tempo.save();

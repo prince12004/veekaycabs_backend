@@ -41,6 +41,7 @@ const adminSliderRoutes = require('./routes/admin/slider');
 const adminTestimonialsRoutes = require('./routes/admin/testimonials');
 const adminOffersRoutes = require('./routes/admin/offers');
 const adminPolicyRoutes = require('./routes/admin/policy');
+const adminWhatsappRoutes = require('./routes/admin/whatsapp');
 const tempoRoutes = require('./routes/tempo');
 const favoritesRoutes = require('./routes/favorites');
 const publicRoutes = require('./routes/public');
@@ -112,6 +113,7 @@ app.use('/api/admin/slider', adminSliderRoutes);
 app.use('/api/admin/testimonials', adminTestimonialsRoutes);
 app.use('/api/admin/offers', adminOffersRoutes);
 app.use('/api/admin/policy', adminPolicyRoutes);
+app.use('/api/admin/whatsapp', adminWhatsappRoutes);
 
 // Health check
 app.get('/health', (req, res) =>

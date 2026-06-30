@@ -28,13 +28,12 @@ const calculateFare = (car, startTime, endTime, doorstepDelivery = false, coupon
   const isWeekend = [0, 6].includes(new Date(startTime).getDay());
   const rate = isWeekend ? car.weekendPrice : car.regularPrice;
   const bookingFare = hours * rate;
-  const gst = Math.round(bookingFare * 0.18);
   const doorstepCharge = doorstepDelivery ? (cityDeliveryCharge || 500) : 0;
   const discountAmount = coupon ? Math.round(calculateCouponDiscount(coupon, bookingFare)) : 0;
-  const totalAmount = bookingFare + gst + doorstepCharge - discountAmount + car.securityDeposit;
-  const tokenAmount = Math.min(1000, Math.round(totalAmount * 0.2));
+  const totalAmount = bookingFare + doorstepCharge - discountAmount + car.securityDeposit;
+  const tokenAmount = Math.round(totalAmount * 0.25);
   const balanceDue = totalAmount - tokenAmount;
-  return { hours, rate, bookingFare, gst, doorstepCharge, discountAmount, totalAmount, tokenAmount, balanceDue };
+  return { hours, rate, bookingFare, doorstepCharge, discountAmount, totalAmount, tokenAmount, balanceDue };
 };
 
 // POST /api/bookings/create
@@ -46,6 +45,7 @@ const createBooking = async (req, res) => {
       endTime,
       pickupLocation,
       doorstepDelivery = false,
+      deliveryAddress,
       couponCode,
     } = req.body;
 
@@ -133,11 +133,11 @@ const createBooking = async (req, res) => {
       endTime: end,
       pickupLocation,
       doorstepDelivery,
+      deliveryAddress: doorstepDelivery ? deliveryAddress : undefined,
       doorstepCharge: fare.doorstepCharge,
       bookingFare: fare.bookingFare,
       securityDeposit: car.securityDeposit,
       discount: fare.discountAmount,
-      gst: fare.gst,
       totalAmount: fare.totalAmount,
       tokenAmount: fare.tokenAmount,
       balanceDue: fare.balanceDue,

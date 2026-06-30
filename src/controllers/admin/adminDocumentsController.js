@@ -7,8 +7,8 @@ const getPendingDocuments = async (req, res) => {
   try {
     const { status = 'pending', page = 1, limit = 20 } = req.query;
 
-    // Find documents where any sub-doc has the given status
-    const filter = {
+    // "all" → return every record; otherwise filter by status
+    const filter = status === 'all' ? {} : {
       $or: [
         { 'aadhaar.status': status },
         { 'pan.status': status },
