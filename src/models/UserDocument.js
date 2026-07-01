@@ -15,6 +15,9 @@ const UserDocumentSchema = new mongoose.Schema({
     status: { type: String, enum: docStatus, default: 'not_uploaded' },
     verifiedAt: Date,
     rejectedReason: String,
+    // QuickEKYC OTP flow state — set by send-otp, cleared by verify-otp.
+    pendingRequestId: String,
+    otpSentAt: Date,
   },
   pan: {
     number: String,

@@ -124,18 +124,18 @@ const notifyAdminNewBooking = async (booking) => {
   ]);
 };
 
-// Send a single media document via WhatsApp (session API)
+// Send a single media document via WhatsApp (session API — no template needed)
 const sendDocumentMessage = async (mobile, docUrl, filename, caption = '') => {
   const destination = cleanMobile(mobile);
-  if (!destination) return;
+  if (!destination) return { success: false, error: 'no_mobile' };
 
   if (!isConfigured()) {
     console.log(`[WhatsApp doc] To ${destination}: ${filename} — ${docUrl}`);
-    return;
+    return { success: true };
   }
 
   try {
-    await axios.post(
+    const res = await axios.post(
       'https://backend.aisensy.com/campaign/t1/api/v2/messages',
       {
         apiKey: process.env.AISENSY_API_KEY,
@@ -147,25 +147,23 @@ const sendDocumentMessage = async (mobile, docUrl, filename, caption = '') => {
       },
       { timeout: 15000 }
     );
+    return { success: true, data: res.data };
   } catch (error) {
     console.error(`[AiSensy] doc send error [${filename}]:`, error.response?.data || error.message);
+    return { success: false, error: error.response?.data?.message || error.message };
   }
 };
 
-// ─── Helper: build a proper media URL for AiSensy ────────────────────────────
-// Cloudinary raw URLs have no extension — AiSensy needs .pdf to detect file type
-const toMediaUrl = (url) => {
-  const clean = url.split('?')[0];
-  if (clean.includes('/raw/upload/') && !clean.endsWith('.pdf')) return `${clean}.pdf`;
-  return clean;
-};
+// Strip query params only — Cloudinary raw upload public_ids have no extension,
+// appending .pdf returns 404. The raw URL serves the actual PDF (verified by magic bytes).
+const toMediaUrl = (url) => url.split('?')[0];
 
 // ─── Template 3 — Car Docs to Customer ───────────────────────────────────────
 const sendCarDocsToCustomer = async (mobile, customerName, car, bookingId, availableDocs = []) => {
   const destination = cleanMobile(mobile);
   const errors = [];
 
-  // 1. Always send text notification (car_documents_ready TEXT template — always works)
+  // 1. Text notification (car_documents_ready — 4 params, always works)
   await sendTemplateMessage(mobile, 'car_documents_ready', [
     customerName,
     bookingId,
@@ -179,17 +177,21 @@ const sendCarDocsToCustomer = async (mobile, customerName, car, bookingId, avail
     return { success: true, errors: [] };
   }
 
-  // 2. Attempt to send each document as PDF via car_docs_with_file DOCUMENT template.
+  // 2. TODO: send individual document files once NeoDove DOCUMENT-type template is approved.
+  // car_doc_link is a TEXT template — AiSensy ignores the media field for it.
+  // When the new DOCUMENT template is approved, replace 'PENDING_DOCUMENT_TEMPLATE' below
+  // with the approved template name (5 params: name, bookingId, car, regNo, docLabel).
+  // 2. Send each doc via car_doc_link FILE template (5 params, media = actual file URL)
+  // {{1}}=name {{2}}=bookingId {{3}}=car {{4}}=regNo {{5}}=docLabel
+  // media.url = Cloudinary raw URL (no .pdf suffix — confirmed working, file is real PDF)
   for (const doc of availableDocs) {
     await new Promise(r => setTimeout(r, 2000));
     const mediaUrl = toMediaUrl(doc.url);
     const filename = `${doc.label.replace(/\s+/g, '_')}_${bookingId}.pdf`;
-    // car_doc_link is FILE type — send PDF as media attachment
-    // Template: {{1}}=name {{2}}=bookingId {{3}}=car {{4}}=regNo {{5}}=docUrl
     const result = await sendTemplateMessage(
       mobile,
       'car_doc_link',
-      [customerName, bookingId, car?.name || 'N/A', car?.registrationNo || 'N/A', mediaUrl],
+      [customerName, bookingId, car?.name || 'N/A', car?.registrationNo || 'N/A', doc.label],
       { url: mediaUrl, filename }
     );
     console.log(`[sendCarDocs] car_doc_link [${doc.label}]:`, JSON.stringify(result?.data));

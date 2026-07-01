@@ -26,29 +26,44 @@ const CarSchema = new mongoose.Schema({
     roadTax: { url: String, expiry: Date },
     rc: { url: String, expiry: Date },
   },
-  // RC verification result via QuickEKYC. Field names below are a best-guess
-  // normalization of a typical Indian vehicle-RC API response — ADJUST once
-  // real QuickEKYC docs are available. `raw` always preserves the untouched
-  // API response so no data is lost even if the normalized fields are wrong.
+  // RC verification result via QuickEKYC's RC Advance endpoint
+  // (POST /rc/rc_advance). `raw` always preserves the untouched API
+  // response so no data is lost even if a normalized field is wrong.
   rcVerification: {
     status: { type: String, enum: ['verified', 'failed', 'not_run'], default: 'not_run' },
     ownerName: { type: String },
+    fatherName: { type: String },
+    presentAddress: { type: String },
+    permanentAddress: { type: String },
     registrationDate: { type: Date },
+    rcStatus: { type: String },
+    ownerNumber: { type: String },
+    rtoCode: { type: String },
+    registeredAt: { type: String },
     vehicleClass: { type: String },
+    vehicleModel: { type: String },
+    makerDescription: { type: String },
+    bodyType: { type: String },
+    fuelType: { type: String },
+    color: { type: String },
+    seatCapacity: { type: Number },
+    cubicCapacity: { type: String },
+    manufacturingDate: { type: String },
     chassisNumber: { type: String },
     engineNumber: { type: String },
+    insuranceCompany: { type: String },
+    insurancePolicyNumber: { type: String },
     insuranceValidUpto: { type: Date },
     fitnessValidUpto: { type: Date },
-    pucValidUpto: { type: Date },
-    taxValidUpto: { type: Date },
-    rcStatus: { type: String },
+    taxUpto: { type: Date },
+    puccUpto: { type: Date },
+    financer: { type: String },
+    blacklistStatus: { type: String },
     raw: { type: mongoose.Schema.Types.Mixed },
     analyzedAt: { type: Date },
     error: { type: String },
   },
-  // Pending traffic Challan check result via QuickEKYC. Same caveat as
-  // above — `challans[]` field names are a best guess, adjust once real
-  // docs are known.
+  // Pending traffic Challan check result via QuickEKYC (POST /challan/challan).
   challanCheck: {
     status: { type: String, enum: ['checked', 'failed', 'not_run'], default: 'not_run' },
     totalChallans: { type: Number, default: 0 },
