@@ -16,12 +16,14 @@ const getPendingDocuments = async (req, res) => {
       ],
     };
 
-    const total = await UserDocument.countDocuments(filter);
-    const docs = await UserDocument.find(filter)
-      .populate('userId', 'name mobile email kycStatus')
-      .sort({ updatedAt: -1 })
-      .skip((parseInt(page) - 1) * parseInt(limit))
-      .limit(parseInt(limit));
+    const [total, docs] = await Promise.all([
+      UserDocument.countDocuments(filter),
+      UserDocument.find(filter)
+        .populate('userId', 'name mobile email kycStatus')
+        .sort({ updatedAt: -1 })
+        .skip((parseInt(page) - 1) * parseInt(limit))
+        .limit(parseInt(limit)),
+    ]);
 
     return res.json({
       success: true,
@@ -79,10 +81,9 @@ const reviewDocuments = async (req, res) => {
       kycStatus = 'rejected';
     }
 
-    await User.findByIdAndUpdate(req.params.userId, { kycStatus });
+    const user = await User.findByIdAndUpdate(req.params.userId, { kycStatus }, { new: true });
 
-    // Notify user by email
-    const user = await User.findById(req.params.userId);
+    // Notify user by email — fired without blocking the admin's response
     if (user?.email) {
       const emailSubject =
         kycStatus === 'verified'
@@ -93,7 +94,7 @@ const reviewDocuments = async (req, res) => {
           ? `<h2>Congratulations ${user.name}!</h2><p>Your KYC documents have been verified. You can now book cars on Veekay Cabs.</p>`
           : `<h2>Hi ${user.name},</h2><p>Some of your KYC documents need attention. Please re-upload the rejected documents and submit again.</p>`;
 
-      await sendEmail({ to: user.email, subject: emailSubject, html: emailHtml });
+      sendEmail({ to: user.email, subject: emailSubject, html: emailHtml }).catch(() => {});
     }
 
     return res.json({ success: true, data: docs, kycStatus, message: 'Documents reviewed successfully' });

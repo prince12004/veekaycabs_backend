@@ -8,14 +8,15 @@ exports.getAllTempoBookings = async (req, res) => {
     const filter = {};
     if (status) filter.status = status;
 
-    const bookings = await TempoBooking.find(filter)
-      .populate('userId', 'name mobile email')
-      .populate('tempoId', 'name registrationNo seats')
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(Number(limit));
-
-    const total = await TempoBooking.countDocuments(filter);
+    const [bookings, total] = await Promise.all([
+      TempoBooking.find(filter)
+        .populate('userId', 'name mobile email')
+        .populate('tempoId', 'name registrationNo seats')
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(Number(limit)),
+      TempoBooking.countDocuments(filter),
+    ]);
     res.json({ success: true, data: bookings, total, page: Number(page) });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

@@ -8,12 +8,14 @@ const getAllBlogs = async (req, res) => {
     const filter = {};
     if (isPublished !== undefined) filter.isPublished = isPublished === 'true';
 
-    const total = await Blog.countDocuments(filter);
-    const blogs = await Blog.find(filter)
-      .select('title slug isPublished publishedAt views tags author createdAt')
-      .sort({ createdAt: -1 })
-      .skip((parseInt(page) - 1) * parseInt(limit))
-      .limit(parseInt(limit));
+    const [total, blogs] = await Promise.all([
+      Blog.countDocuments(filter),
+      Blog.find(filter)
+        .select('title slug isPublished publishedAt views tags author createdAt')
+        .sort({ createdAt: -1 })
+        .skip((parseInt(page) - 1) * parseInt(limit))
+        .limit(parseInt(limit)),
+    ]);
 
     return res.json({ success: true, data: blogs, total });
   } catch (error) {

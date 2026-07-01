@@ -10,61 +10,61 @@ const getRevenueReport = async (req, res) => {
 
     const dateFormat = groupBy === 'month' ? '%Y-%m' : '%Y-%m-%d';
 
-    const revenueData = await Booking.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: fromDate, $lte: toDate },
-          status: { $in: ['confirmed', 'active', 'completed'] },
+    const [revenueData, cityBreakdown, summary] = await Promise.all([
+      Booking.aggregate([
+        {
+          $match: {
+            createdAt: { $gte: fromDate, $lte: toDate },
+            status: { $in: ['confirmed', 'active', 'completed'] },
+          },
         },
-      },
-      {
-        $group: {
-          _id: { $dateToString: { format: dateFormat, date: '$createdAt' } },
-          totalRevenue: { $sum: '$totalAmount' },
-          collectedRevenue: { $sum: '$amountPaid' },
-          bookingCount: { $sum: 1 },
-          avgBookingValue: { $avg: '$totalAmount' },
+        {
+          $group: {
+            _id: { $dateToString: { format: dateFormat, date: '$createdAt' } },
+            totalRevenue: { $sum: '$totalAmount' },
+            collectedRevenue: { $sum: '$amountPaid' },
+            bookingCount: { $sum: 1 },
+            avgBookingValue: { $avg: '$totalAmount' },
+          },
         },
-      },
-      { $sort: { _id: 1 } },
-    ]);
-
-    const cityBreakdown = await Booking.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: fromDate, $lte: toDate },
-          status: { $in: ['confirmed', 'active', 'completed'] },
+        { $sort: { _id: 1 } },
+      ]),
+      Booking.aggregate([
+        {
+          $match: {
+            createdAt: { $gte: fromDate, $lte: toDate },
+            status: { $in: ['confirmed', 'active', 'completed'] },
+          },
         },
-      },
-      {
-        $group: {
-          _id: '$cityId',
-          totalRevenue: { $sum: '$totalAmount' },
-          bookingCount: { $sum: 1 },
+        {
+          $group: {
+            _id: '$cityId',
+            totalRevenue: { $sum: '$totalAmount' },
+            bookingCount: { $sum: 1 },
+          },
         },
-      },
-      { $lookup: { from: 'cities', localField: '_id', foreignField: '_id', as: 'city' } },
-      { $unwind: { path: '$city', preserveNullAndEmptyArrays: true } },
-      { $project: { cityName: '$city.name', totalRevenue: 1, bookingCount: 1 } },
-      { $sort: { totalRevenue: -1 } },
-    ]);
-
-    const summary = await Booking.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: fromDate, $lte: toDate },
-          status: { $in: ['confirmed', 'active', 'completed'] },
+        { $lookup: { from: 'cities', localField: '_id', foreignField: '_id', as: 'city' } },
+        { $unwind: { path: '$city', preserveNullAndEmptyArrays: true } },
+        { $project: { cityName: '$city.name', totalRevenue: 1, bookingCount: 1 } },
+        { $sort: { totalRevenue: -1 } },
+      ]),
+      Booking.aggregate([
+        {
+          $match: {
+            createdAt: { $gte: fromDate, $lte: toDate },
+            status: { $in: ['confirmed', 'active', 'completed'] },
+          },
         },
-      },
-      {
-        $group: {
-          _id: null,
-          totalRevenue: { $sum: '$totalAmount' },
-          collectedRevenue: { $sum: '$amountPaid' },
-          bookingCount: { $sum: 1 },
-          avgBookingValue: { $avg: '$totalAmount' },
+        {
+          $group: {
+            _id: null,
+            totalRevenue: { $sum: '$totalAmount' },
+            collectedRevenue: { $sum: '$amountPaid' },
+            bookingCount: { $sum: 1 },
+            avgBookingValue: { $avg: '$totalAmount' },
+          },
         },
-      },
+      ]),
     ]);
 
     return res.json({
@@ -88,45 +88,44 @@ const getBookingStats = async (req, res) => {
     const fromDate = from ? new Date(from) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const toDate = to ? new Date(to) : new Date();
 
-    const statusBreakdown = await Booking.aggregate([
-      { $match: { createdAt: { $gte: fromDate, $lte: toDate } } },
-      { $group: { _id: '$status', count: { $sum: 1 } } },
-    ]);
-
-    const paymentModeBreakdown = await Booking.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: fromDate, $lte: toDate },
-          status: { $in: ['confirmed', 'active', 'completed'] },
+    const [statusBreakdown, paymentModeBreakdown, topCars, cancellationRate] = await Promise.all([
+      Booking.aggregate([
+        { $match: { createdAt: { $gte: fromDate, $lte: toDate } } },
+        { $group: { _id: '$status', count: { $sum: 1 } } },
+      ]),
+      Booking.aggregate([
+        {
+          $match: {
+            createdAt: { $gte: fromDate, $lte: toDate },
+            status: { $in: ['confirmed', 'active', 'completed'] },
+          },
         },
-      },
-      { $group: { _id: '$paymentMode', count: { $sum: 1 }, revenue: { $sum: '$totalAmount' } } },
-    ]);
-
-    const topCars = await Booking.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: fromDate, $lte: toDate },
-          status: { $in: ['confirmed', 'active', 'completed'] },
+        { $group: { _id: '$paymentMode', count: { $sum: 1 }, revenue: { $sum: '$totalAmount' } } },
+      ]),
+      Booking.aggregate([
+        {
+          $match: {
+            createdAt: { $gte: fromDate, $lte: toDate },
+            status: { $in: ['confirmed', 'active', 'completed'] },
+          },
         },
-      },
-      { $group: { _id: '$carId', bookings: { $sum: 1 }, revenue: { $sum: '$totalAmount' } } },
-      { $sort: { bookings: -1 } },
-      { $limit: 10 },
-      { $lookup: { from: 'cars', localField: '_id', foreignField: '_id', as: 'car' } },
-      { $unwind: { path: '$car', preserveNullAndEmptyArrays: true } },
-      { $project: { carName: '$car.name', registrationNo: '$car.registrationNo', bookings: 1, revenue: 1 } },
-    ]);
-
-    const cancellationRate = await Booking.aggregate([
-      { $match: { createdAt: { $gte: fromDate, $lte: toDate } } },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: 1 },
-          cancelled: { $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] } },
+        { $group: { _id: '$carId', bookings: { $sum: 1 }, revenue: { $sum: '$totalAmount' } } },
+        { $sort: { bookings: -1 } },
+        { $limit: 10 },
+        { $lookup: { from: 'cars', localField: '_id', foreignField: '_id', as: 'car' } },
+        { $unwind: { path: '$car', preserveNullAndEmptyArrays: true } },
+        { $project: { carName: '$car.name', registrationNo: '$car.registrationNo', bookings: 1, revenue: 1 } },
+      ]),
+      Booking.aggregate([
+        { $match: { createdAt: { $gte: fromDate, $lte: toDate } } },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: 1 },
+            cancelled: { $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] } },
+          },
         },
-      },
+      ]),
     ]);
 
     const rate = cancellationRate[0];

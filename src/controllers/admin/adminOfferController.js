@@ -28,13 +28,12 @@ const create = async (req, res) => {
 
 const update = async (req, res) => {
   try {
-    const offer = await Offer.findById(req.params.id);
+    const updates = { ...req.body };
+    const newUrl = getFileUrl(req.file); if (newUrl) updates.imageUrl = newUrl;
+    if (req.body.isActive !== undefined) updates.isActive = req.body.isActive === 'true' || req.body.isActive === true;
+    if (req.body.discountPct) updates.discountPct = Number(req.body.discountPct);
+    const offer = await Offer.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
     if (!offer) return res.status(404).json({ success: false, message: 'Offer not found' });
-    Object.assign(offer, req.body);
-    const newUrl = getFileUrl(req.file); if (newUrl) offer.imageUrl = newUrl;
-    if (req.body.isActive !== undefined) offer.isActive = req.body.isActive === 'true' || req.body.isActive === true;
-    if (req.body.discountPct) offer.discountPct = Number(req.body.discountPct);
-    await offer.save();
     return res.json({ success: true, data: offer });
   } catch (e) {
     return res.status(500).json({ success: false, message: 'Failed to update offer' });

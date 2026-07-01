@@ -31,14 +31,16 @@ const getAllBookings = async (req, res) => {
       ];
     }
 
-    const total = await Booking.countDocuments(filter);
-    const bookings = await Booking.find(filter)
-      .populate('userId', 'name mobile email')
-      .populate('carId', 'name registrationNo type')
-      .populate('cityId', 'name')
-      .sort({ createdAt: -1 })
-      .skip((parseInt(page) - 1) * parseInt(limit))
-      .limit(parseInt(limit));
+    const [total, bookings] = await Promise.all([
+      Booking.countDocuments(filter),
+      Booking.find(filter)
+        .populate('userId', 'name mobile email')
+        .populate('carId', 'name registrationNo type')
+        .populate('cityId', 'name')
+        .sort({ createdAt: -1 })
+        .skip((parseInt(page) - 1) * parseInt(limit))
+        .limit(parseInt(limit)),
+    ]);
 
     return res.json({
       success: true,

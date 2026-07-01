@@ -29,14 +29,13 @@ const create = async (req, res) => {
 
 const update = async (req, res) => {
   try {
-    const t = await Testimonial.findById(req.params.id);
+    const updates = { ...req.body };
+    const newUrl = getFileUrl(req.file); if (newUrl) updates.avatarUrl = newUrl;
+    if (req.body.isActive !== undefined) updates.isActive = req.body.isActive === 'true' || req.body.isActive === true;
+    if (req.body.showOnHome !== undefined) updates.showOnHome = req.body.showOnHome === 'true' || req.body.showOnHome === true;
+    if (req.body.rating) updates.rating = Number(req.body.rating);
+    const t = await Testimonial.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
     if (!t) return res.status(404).json({ success: false, message: 'Not found' });
-    Object.assign(t, req.body);
-    const newUrl = getFileUrl(req.file); if (newUrl) t.avatarUrl = newUrl;
-    if (req.body.isActive !== undefined) t.isActive = req.body.isActive === 'true' || req.body.isActive === true;
-    if (req.body.showOnHome !== undefined) t.showOnHome = req.body.showOnHome === 'true' || req.body.showOnHome === true;
-    if (req.body.rating) t.rating = Number(req.body.rating);
-    await t.save();
     return res.json({ success: true, data: t });
   } catch (e) {
     return res.status(500).json({ success: false, message: 'Failed to update' });

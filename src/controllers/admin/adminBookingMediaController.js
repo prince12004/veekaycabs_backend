@@ -121,10 +121,12 @@ const uploadBookingMedia = async (req, res) => {
 // ─── GET /api/admin/bookings/:id/media ───────────────────────────────────────
 const getBookingMedia = async (req, res) => {
   try {
-    const booking = await Booking.findById(req.params.id);
+    const [booking, media] = await Promise.all([
+      Booking.findById(req.params.id, '_id'),
+      BookingMedia.find({ bookingId: req.params.id }).sort({ uploadedAt: 1 }),
+    ]);
     if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
 
-    const media = await BookingMedia.find({ bookingId: booking._id }).sort({ uploadedAt: 1 });
     return res.json({ success: true, data: media });
   } catch (error) {
     console.error('getBookingMedia error:', error);

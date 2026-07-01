@@ -18,12 +18,14 @@ const getAllUsers = async (req, res) => {
       ];
     }
 
-    const total = await User.countDocuments(filter);
-    const users = await User.find(filter)
-      .select('-refreshToken')
-      .sort({ createdAt: -1 })
-      .skip((parseInt(page) - 1) * parseInt(limit))
-      .limit(parseInt(limit));
+    const [total, users] = await Promise.all([
+      User.countDocuments(filter),
+      User.find(filter)
+        .select('-refreshToken')
+        .sort({ createdAt: -1 })
+        .skip((parseInt(page) - 1) * parseInt(limit))
+        .limit(parseInt(limit)),
+    ]);
 
     return res.json({
       success: true,
@@ -44,11 +46,13 @@ const getUserDetail = async (req, res) => {
     const user = await User.findById(req.params.id).select('-refreshToken');
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-    const docs = await UserDocument.findOne({ userId: user._id });
-    const bookings = await Booking.find({ userId: user._id })
-      .populate('carId', 'name registrationNo')
-      .sort({ createdAt: -1 })
-      .limit(10);
+    const [docs, bookings] = await Promise.all([
+      UserDocument.findOne({ userId: user._id }),
+      Booking.find({ userId: user._id })
+        .populate('carId', 'name registrationNo')
+        .sort({ createdAt: -1 })
+        .limit(10),
+    ]);
 
     return res.json({ success: true, data: { user, documents: docs, recentBookings: bookings } });
   } catch (error) {
@@ -60,14 +64,17 @@ const getUserDetail = async (req, res) => {
 // PATCH /api/admin/users/:id/block
 const toggleBlockUser = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id);
+    // role check folded into the update pipeline so admin accounts are left untouched
+    // in the same round trip instead of a separate read-then-write
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      [{ $set: { isBlocked: { $cond: [{ $eq: ['$role', 'admin'] }, '$isBlocked', { $not: '$isBlocked' }] } } }],
+      { new: true }
+    );
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
     if (user.role === 'admin') {
       return res.status(403).json({ success: false, message: 'Cannot block admin accounts' });
     }
-
-    user.isBlocked = !user.isBlocked;
-    await user.save();
 
     return res.json({
       success: true,

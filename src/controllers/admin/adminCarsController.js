@@ -10,12 +10,14 @@ const getAllCars = async (req, res) => {
     if (type) filter.type = type;
     if (isActive !== undefined) filter.isActive = isActive === 'true';
 
-    const total = await Car.countDocuments(filter);
-    const cars = await Car.find(filter)
-      .populate('cityId', 'name slug')
-      .sort({ createdAt: -1 })
-      .skip((parseInt(page) - 1) * parseInt(limit))
-      .limit(parseInt(limit));
+    const [total, cars] = await Promise.all([
+      Car.countDocuments(filter),
+      Car.find(filter)
+        .populate('cityId', 'name slug')
+        .sort({ createdAt: -1 })
+        .skip((parseInt(page) - 1) * parseInt(limit))
+        .limit(parseInt(limit)),
+    ]);
 
     return res.json({
       success: true,
@@ -143,11 +145,12 @@ const deleteCar = async (req, res) => {
 // PATCH /api/admin/cars/:id/toggle
 const toggleCarStatus = async (req, res) => {
   try {
-    const car = await Car.findById(req.params.id);
+    const car = await Car.findByIdAndUpdate(
+      req.params.id,
+      [{ $set: { isActive: { $not: '$isActive' } } }],
+      { new: true }
+    );
     if (!car) return res.status(404).json({ success: false, message: 'Car not found' });
-
-    car.isActive = !car.isActive;
-    await car.save();
 
     return res.json({
       success: true,

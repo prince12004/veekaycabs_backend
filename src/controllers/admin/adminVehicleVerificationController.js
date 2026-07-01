@@ -264,11 +264,13 @@ const listVehicleChecks = async (req, res) => {
       $or: [{ 'rcVerification.analyzedAt': { $ne: null } }, { 'challanCheck.analyzedAt': { $ne: null } }],
     };
 
-    const total = await VehicleCheck.countDocuments(filter);
-    const entries = await VehicleCheck.find(filter)
-      .sort({ updatedAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit);
+    const [total, entries] = await Promise.all([
+      VehicleCheck.countDocuments(filter),
+      VehicleCheck.find(filter)
+        .sort({ updatedAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit),
+    ]);
 
     return res.json({
       success: true,

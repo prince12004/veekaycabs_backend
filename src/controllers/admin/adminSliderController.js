@@ -25,19 +25,19 @@ const create = async (req, res) => {
 
 const update = async (req, res) => {
   try {
-    const slide = await Slider.findById(req.params.id);
-    if (!slide) return res.status(404).json({ success: false, message: 'Slider not found' });
     const { title, subtitle, linkUrl, linkText, displayPage, sortOrder, isActive } = req.body;
-    if (title !== undefined) slide.title = title;
-    if (subtitle !== undefined) slide.subtitle = subtitle;
-    if (linkUrl !== undefined) slide.linkUrl = linkUrl;
-    if (linkText !== undefined) slide.linkText = linkText;
-    if (displayPage !== undefined) slide.displayPage = displayPage;
-    if (sortOrder !== undefined) slide.sortOrder = Number(sortOrder);
-    if (isActive !== undefined) slide.isActive = isActive === 'true' || isActive === true;
+    const updates = {};
+    if (title !== undefined) updates.title = title;
+    if (subtitle !== undefined) updates.subtitle = subtitle;
+    if (linkUrl !== undefined) updates.linkUrl = linkUrl;
+    if (linkText !== undefined) updates.linkText = linkText;
+    if (displayPage !== undefined) updates.displayPage = displayPage;
+    if (sortOrder !== undefined) updates.sortOrder = Number(sortOrder);
+    if (isActive !== undefined) updates.isActive = isActive === 'true' || isActive === true;
     const newUrl = getFileUrl(req.file);
-    if (newUrl) slide.imageUrl = newUrl;
-    await slide.save();
+    if (newUrl) updates.imageUrl = newUrl;
+    const slide = await Slider.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
+    if (!slide) return res.status(404).json({ success: false, message: 'Slider not found' });
     return res.json({ success: true, data: slide });
   } catch (e) {
     return res.status(500).json({ success: false, message: 'Failed to update slider' });

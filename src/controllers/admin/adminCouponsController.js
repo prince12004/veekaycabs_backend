@@ -7,12 +7,14 @@ const getAllCoupons = async (req, res) => {
     const filter = {};
     if (isActive !== undefined) filter.isActive = isActive === 'true';
 
-    const total = await Coupon.countDocuments(filter);
-    const coupons = await Coupon.find(filter)
-      .populate('applicableCities', 'name')
-      .sort({ createdAt: -1 })
-      .skip((parseInt(page) - 1) * parseInt(limit))
-      .limit(parseInt(limit));
+    const [total, coupons] = await Promise.all([
+      Coupon.countDocuments(filter),
+      Coupon.find(filter)
+        .populate('applicableCities', 'name')
+        .sort({ createdAt: -1 })
+        .skip((parseInt(page) - 1) * parseInt(limit))
+        .limit(parseInt(limit)),
+    ]);
 
     return res.json({ success: true, data: coupons, total });
   } catch (error) {
@@ -64,10 +66,12 @@ const deleteCoupon = async (req, res) => {
 // PATCH /api/admin/coupons/:id/toggle
 const toggleCoupon = async (req, res) => {
   try {
-    const coupon = await Coupon.findById(req.params.id);
+    const coupon = await Coupon.findByIdAndUpdate(
+      req.params.id,
+      [{ $set: { isActive: { $not: '$isActive' } } }],
+      { new: true }
+    );
     if (!coupon) return res.status(404).json({ success: false, message: 'Coupon not found' });
-    coupon.isActive = !coupon.isActive;
-    await coupon.save();
     return res.json({
       success: true,
       data: { _id: coupon._id, isActive: coupon.isActive },

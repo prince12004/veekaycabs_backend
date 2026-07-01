@@ -8,11 +8,13 @@ const getAllContacts = async (req, res) => {
     if (type) filter.type = type;
     if (status) filter.status = status;
 
-    const total = await ContactRequest.countDocuments(filter);
-    const contacts = await ContactRequest.find(filter)
-      .sort({ createdAt: -1 })
-      .skip((parseInt(page) - 1) * parseInt(limit))
-      .limit(parseInt(limit));
+    const [total, contacts] = await Promise.all([
+      ContactRequest.countDocuments(filter),
+      ContactRequest.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((parseInt(page) - 1) * parseInt(limit))
+        .limit(parseInt(limit)),
+    ]);
 
     return res.json({
       success: true,

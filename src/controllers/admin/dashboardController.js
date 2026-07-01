@@ -2,7 +2,9 @@ const Booking = require('../../models/Booking');
 const User = require('../../models/User');
 const UserDocument = require('../../models/UserDocument');
 const Car = require('../../models/Car');
+const City = require('../../models/City');
 const ContactRequest = require('../../models/ContactRequest');
+const Refund = require('../../models/Refund');
 const TempoBooking = require('../../models/TempoBooking');
 
 // GET /api/admin/dashboard/stats
@@ -13,10 +15,24 @@ const getDashboardStats = async (req, res) => {
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
 
+    const yesterdayStart = new Date(todayStart);
+    yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+    const yesterdayEnd = new Date(todayEnd);
+    yesterdayEnd.setDate(yesterdayEnd.getDate() - 1);
+
+    const sevenDaysAgo = new Date(todayStart);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+    const prevWeekStart = new Date(todayStart);
+    prevWeekStart.setDate(prevWeekStart.getDate() - 13);
+    const prevWeekEnd = new Date(sevenDaysAgo);
+    prevWeekEnd.setMilliseconds(-1);
+
     const [
       todayRevenueResult,
+      yesterdayRevenueResult,
       activeBookings,
       newUsersToday,
+      newUsersYesterday,
       pendingKyc,
       totalCars,
       activeCars,
@@ -24,13 +40,24 @@ const getDashboardStats = async (req, res) => {
       completedBookings,
       recentBookings,
       allCarsForExpiry,
+      last7DaysResult,
+      prevWeekRevenueResult,
+      citiesActive,
+      kycApprovedToday,
+      newContactsToday,
+      pendingRefunds,
     ] = await Promise.all([
       Booking.aggregate([
         { $match: { status: 'confirmed', createdAt: { $gte: todayStart, $lte: todayEnd } } },
         { $group: { _id: null, total: { $sum: '$amountPaid' } } },
       ]),
+      Booking.aggregate([
+        { $match: { status: 'confirmed', createdAt: { $gte: yesterdayStart, $lte: yesterdayEnd } } },
+        { $group: { _id: null, total: { $sum: '$amountPaid' } } },
+      ]),
       Booking.countDocuments({ status: 'active' }),
       User.countDocuments({ createdAt: { $gte: todayStart, $lte: todayEnd }, role: 'user' }),
+      User.countDocuments({ createdAt: { $gte: yesterdayStart, $lte: yesterdayEnd }, role: 'user' }),
       User.countDocuments({ kycStatus: 'pending' }),
       Car.countDocuments({}),
       Car.countDocuments({ isActive: true }),
@@ -44,10 +71,66 @@ const getDashboardStats = async (req, res) => {
         .populate('cityId', 'name')
         .lean(),
       Car.find({ isActive: true }).populate('cityId', 'name').lean(),
+      Booking.aggregate([
+        {
+          $match: {
+            createdAt: { $gte: sevenDaysAgo, $lte: todayEnd },
+            status: { $in: ['confirmed', 'active', 'completed'] },
+          },
+        },
+        {
+          $group: {
+            _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+            revenue: { $sum: '$amountPaid' },
+            bookings: { $sum: 1 },
+          },
+        },
+      ]),
+      Booking.aggregate([
+        {
+          $match: {
+            createdAt: { $gte: prevWeekStart, $lte: prevWeekEnd },
+            status: { $in: ['confirmed', 'active', 'completed'] },
+          },
+        },
+        { $group: { _id: null, total: { $sum: '$amountPaid' } } },
+      ]),
+      City.countDocuments({ isActive: true }),
+      User.countDocuments({ kycStatus: 'verified', updatedAt: { $gte: todayStart, $lte: todayEnd } }),
+      ContactRequest.countDocuments({ createdAt: { $gte: todayStart, $lte: todayEnd } }),
+      Refund.countDocuments({ status: 'pending' }),
     ]);
 
     const todayRevenue = todayRevenueResult[0]?.total || 0;
+    const yesterdayRevenue = yesterdayRevenueResult[0]?.total || 0;
+    const revenueTrendPct = yesterdayRevenue > 0
+      ? Math.round(((todayRevenue - yesterdayRevenue) / yesterdayRevenue) * 100)
+      : (todayRevenue > 0 ? 100 : 0);
+    const newUsersTrend = newUsersToday - newUsersYesterday;
     const fleetUtilization = totalCars > 0 ? Math.round((activeCars / totalCars) * 100) : 0;
+
+    // Zero-fill the last 7 calendar days so the chart always has a full week,
+    // even on days with no bookings
+    const byDay = new Map(last7DaysResult.map((d) => [d._id, d]));
+    const last7Days = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(todayStart);
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      const entry = byDay.get(key);
+      last7Days.push({
+        day: d.toLocaleDateString('en-IN', { weekday: 'short' }),
+        date: key,
+        revenue: entry?.revenue || 0,
+        bookings: entry?.bookings || 0,
+      });
+    }
+    const last7DaysRevenue = last7Days.reduce((sum, d) => sum + d.revenue, 0);
+    const last7DaysBookings = last7Days.reduce((sum, d) => sum + d.bookings, 0);
+    const prevWeekRevenue = prevWeekRevenueResult[0]?.total || 0;
+    const last7DaysTrendPct = prevWeekRevenue > 0
+      ? Math.round(((last7DaysRevenue - prevWeekRevenue) / prevWeekRevenue) * 100)
+      : (last7DaysRevenue > 0 ? 100 : 0);
 
     // Build expiry alerts — docs expiring within 30 days
     const now = new Date();
@@ -78,14 +161,25 @@ const getDashboardStats = async (req, res) => {
       success: true,
       data: {
         todayRevenue,
+        revenueTrendPct,
         activeBookings,
         newUsersToday,
+        newUsersTrend,
         pendingKyc,
         totalCars,
         activeCars,
+        inactiveCars: totalCars - activeCars,
         fleetUtilization,
         totalBookings,
         completedBookings,
+        last7Days,
+        last7DaysRevenue,
+        last7DaysBookings,
+        last7DaysTrendPct,
+        citiesActive,
+        kycApprovedToday,
+        newContactsToday,
+        pendingRefunds,
         recentBookings: recentBookings.map(b => ({
           id: b._id,
           bookingId: b.bookingId,
@@ -114,42 +208,43 @@ const getDashboardInsights = async (req, res) => {
 
     const dateFormat = groupBy === 'month' ? '%Y-%m' : '%Y-%m-%d';
 
-    const bookingData = await Booking.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: fromDate, $lte: toDate },
-          status: { $in: ['confirmed', 'active', 'completed'] },
+    const [bookingData, cityBreakdown] = await Promise.all([
+      Booking.aggregate([
+        {
+          $match: {
+            createdAt: { $gte: fromDate, $lte: toDate },
+            status: { $in: ['confirmed', 'active', 'completed'] },
+          },
         },
-      },
-      {
-        $group: {
-          _id: { $dateToString: { format: dateFormat, date: '$createdAt' } },
-          bookings: { $sum: 1 },
-          revenue: { $sum: '$amountPaid' },
+        {
+          $group: {
+            _id: { $dateToString: { format: dateFormat, date: '$createdAt' } },
+            bookings: { $sum: 1 },
+            revenue: { $sum: '$amountPaid' },
+          },
         },
-      },
-      { $sort: { _id: 1 } },
-    ]);
-
-    const cityBreakdown = await Booking.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: fromDate, $lte: toDate },
-          status: { $in: ['confirmed', 'active', 'completed'] },
+        { $sort: { _id: 1 } },
+      ]),
+      Booking.aggregate([
+        {
+          $match: {
+            createdAt: { $gte: fromDate, $lte: toDate },
+            status: { $in: ['confirmed', 'active', 'completed'] },
+          },
         },
-      },
-      { $group: { _id: '$cityId', bookings: { $sum: 1 }, revenue: { $sum: '$totalAmount' } } },
-      {
-        $lookup: {
-          from: 'cities',
-          localField: '_id',
-          foreignField: '_id',
-          as: 'city',
+        { $group: { _id: '$cityId', bookings: { $sum: 1 }, revenue: { $sum: '$totalAmount' } } },
+        {
+          $lookup: {
+            from: 'cities',
+            localField: '_id',
+            foreignField: '_id',
+            as: 'city',
+          },
         },
-      },
-      { $unwind: { path: '$city', preserveNullAndEmptyArrays: true } },
-      { $project: { cityName: '$city.name', bookings: 1, revenue: 1 } },
-      { $sort: { bookings: -1 } },
+        { $unwind: { path: '$city', preserveNullAndEmptyArrays: true } },
+        { $project: { cityName: '$city.name', bookings: 1, revenue: 1 } },
+        { $sort: { bookings: -1 } },
+      ]),
     ]);
 
     return res.json({
