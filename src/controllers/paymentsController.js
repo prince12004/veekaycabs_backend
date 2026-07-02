@@ -6,7 +6,7 @@ const User = require('../models/User');
 const { createOrder, verifyPaymentSignature, verifyWebhookSignature, createRefund } = require('../services/razorpay');
 const { sendBookingConfirmation } = require('../services/email');
 const { sendBookingConfirmationSms } = require('../services/sms');
-const { notifyAdminNewBooking, sendBookingConfirmedToUser } = require('../services/whatsapp');
+const { notifyAdminNewBooking, sendBookingConfirmedV2ToUser } = require('../services/whatsapp');
 
 // POST /api/payments/create-order
 const createPaymentOrder = async (req, res) => {
@@ -100,7 +100,7 @@ const verifyPayment = async (req, res) => {
     try {
       if (user?.email) await sendBookingConfirmation(user, booking, car);
       if (user?.mobile) await sendBookingConfirmationSms(user.mobile, booking.bookingId, car.name);
-      if (user?.mobile) await sendBookingConfirmedToUser(user, booking, car);
+      if (user?.mobile) await sendBookingConfirmedV2ToUser(user, booking, car);
       await notifyAdminNewBooking(booking);
     } catch (notifyErr) {
       console.error('Notification error (non-fatal):', notifyErr.message);

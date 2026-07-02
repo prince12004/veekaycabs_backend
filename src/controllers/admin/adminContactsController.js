@@ -47,4 +47,35 @@ const updateContactStatus = async (req, res) => {
   }
 };
 
-module.exports = { getAllContacts, updateContactStatus };
+// GET /api/admin/contact-requests/export
+const exportContacts = async (req, res) => {
+  try {
+    const contacts = await ContactRequest.find({}).sort({ createdAt: -1 }).limit(10000);
+
+    const headers = ['Type', 'Name', 'Mobile', 'Email', 'Subject', 'Message', 'Status', 'Created At'];
+
+    const rows = contacts.map((c) => [
+      c.type || '',
+      c.name || '',
+      c.mobile || '',
+      c.email || '',
+      c.subject || '',
+      c.message || '',
+      c.status,
+      new Date(c.createdAt).toLocaleString('en-IN'),
+    ]);
+
+    const csv = [headers, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="contact-requests-${Date.now()}.csv"`);
+    return res.send(csv);
+  } catch (error) {
+    console.error('admin exportContacts error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to export contact requests' });
+  }
+};
+
+module.exports = { getAllContacts, updateContactStatus, exportContacts };

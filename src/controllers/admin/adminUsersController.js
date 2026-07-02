@@ -123,4 +123,37 @@ const updateUser = async (req, res) => {
   }
 };
 
-module.exports = { getAllUsers, getUserDetail, toggleBlockUser, updateUser };
+// GET /api/admin/users/export
+const exportUsers = async (req, res) => {
+  try {
+    const users = await User.find({ role: 'user' })
+      .select('-refreshToken')
+      .sort({ createdAt: -1 })
+      .limit(10000);
+
+    const headers = ['Name', 'Mobile', 'Email', 'KYC Status', 'Blocked', 'Total Bookings', 'Joined At'];
+
+    const rows = users.map((u) => [
+      u.name || '',
+      u.mobile || '',
+      u.email || '',
+      u.kycStatus,
+      u.isBlocked ? 'Yes' : 'No',
+      u.totalBookings || 0,
+      new Date(u.createdAt).toLocaleString('en-IN'),
+    ]);
+
+    const csv = [headers, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="users-${Date.now()}.csv"`);
+    return res.send(csv);
+  } catch (error) {
+    console.error('admin exportUsers error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to export users' });
+  }
+};
+
+module.exports = { getAllUsers, getUserDetail, toggleBlockUser, updateUser, exportUsers };

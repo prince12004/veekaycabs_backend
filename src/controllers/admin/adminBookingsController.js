@@ -2,7 +2,8 @@ const Booking = require('../../models/Booking');
 const Car = require('../../models/Car');
 const User = require('../../models/User');
 const { v4: uuidv4 } = require('uuid');
-const { sendBookingConfirmedToUser, notifyAdminNewBooking, sendBookingCancelledToUser } = require('../../services/whatsapp');
+const { sendBookingConfirmedV2ToUser, notifyAdminNewBooking, sendBookingCancelledToUser, sendBookingInvoiceToUser } = require('../../services/whatsapp');
+const { getFileUrl } = require('../../middleware/upload');
 
 const generateBookingId = () => {
   const ts = Date.now().toString().slice(-6);
@@ -163,7 +164,7 @@ const createOfflineBooking = async (req, res) => {
     // Send WhatsApp confirmation for offline bookings too
     const offlineMobile = populated.userId?.mobile;
     if (offlineMobile && !String(offlineMobile).startsWith('google_')) {
-      sendBookingConfirmedToUser(populated.userId, populated, populated.carId).catch(() => {});
+      sendBookingConfirmedV2ToUser(populated.userId, populated, populated.carId).catch(() => {});
     }
 
     return res.status(201).json({ success: true, data: populated });
@@ -256,7 +257,7 @@ const updateBookingStatus = async (req, res) => {
     if (hasRealMobile) {
       if (status === 'confirmed' || status === 'active') {
         const car = booking.carId;
-        sendBookingConfirmedToUser(booking.userId, booking, car).catch(() => {});
+        sendBookingConfirmedV2ToUser(booking.userId, booking, car).catch(() => {});
       } else if (status === 'cancelled') {
         sendBookingCancelledToUser(booking.userId, booking, booking.carId).catch(() => {});
       }
@@ -304,4 +305,71 @@ const updateBooking = async (req, res) => {
   }
 };
 
-module.exports = { getAllBookings, getBookingDetail, createOfflineBooking, exportBookings, updateBookingStatus, updateBooking };
+// PATCH /api/admin/bookings/:id/verification — save pickup/return condition checklist
+const updateVehicleVerification = async (req, res) => {
+  try {
+    const { stage, condition } = req.body;
+    if (!['pickup', 'return'].includes(stage)) {
+      return res.status(400).json({ success: false, message: 'Invalid stage' });
+    }
+    if (!condition || typeof condition !== 'object') {
+      return res.status(400).json({ success: false, message: 'Condition data required' });
+    }
+
+    const { fuel, odometer, challan, damage, extras, tyres, ac, documents } = condition;
+    const field = stage === 'pickup' ? 'pickupCondition' : 'returnCondition';
+    const update = {
+      [`${field}.fuel`]: fuel,
+      [`${field}.odometer`]: odometer,
+      [`${field}.challan`]: challan,
+      [`${field}.damage`]: damage,
+      [`${field}.extras`]: extras,
+      [`${field}.tyres`]: tyres,
+      [`${field}.ac`]: ac,
+      [`${field}.documents`]: documents,
+      [`${field}.recordedAt`]: new Date(),
+    };
+    if (stage === 'pickup' && odometer !== undefined && odometer !== '') update.odometerStart = odometer;
+    if (stage === 'return' && odometer !== undefined && odometer !== '') update.odometerEnd = odometer;
+
+    const booking = await Booking.findByIdAndUpdate(req.params.id, { $set: update }, { new: true })
+      .populate('userId', 'name mobile email')
+      .populate('carId', 'name registrationNo type')
+      .populate('cityId', 'name');
+
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+    return res.json({ success: true, data: booking });
+  } catch (error) {
+    console.error('admin updateVehicleVerification error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to save verification' });
+  }
+};
+
+// POST /api/admin/bookings/:id/invoice/send-whatsapp — upload PDF + send via WhatsApp
+const sendInvoiceWhatsApp = async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, message: 'Invoice PDF file required' });
+
+    const booking = await Booking.findById(req.params.id)
+      .populate('userId', 'name mobile email')
+      .populate('carId', 'name registrationNo type');
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+
+    const mobile = booking.userId?.mobile;
+    if (!mobile || String(mobile).startsWith('google_')) {
+      return res.status(400).json({ success: false, message: 'Customer has no valid WhatsApp number on file' });
+    }
+
+    const mediaUrl = getFileUrl(req.file);
+    const result = await sendBookingInvoiceToUser(mobile, booking.userId?.name || 'Customer', booking, booking.carId, mediaUrl);
+    if (!result.success) {
+      return res.status(502).json({ success: false, message: result.error || 'Failed to send invoice via WhatsApp' });
+    }
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('admin sendInvoiceWhatsApp error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to send invoice' });
+  }
+};
+
+module.exports = { getAllBookings, getBookingDetail, createOfflineBooking, exportBookings, updateBookingStatus, updateBooking, updateVehicleVerification, sendInvoiceWhatsApp };

@@ -52,9 +52,15 @@ const app = express();
 // Security, compression & logging
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression()); // gzip all responses — reduces bandwidth ~70%
+// In development, Next.js may bind to 3000 or fall back to 3001 depending on
+// what's free — accept both so local CORS doesn't break on a port bounce.
+const allowedOrigins = process.env.NODE_ENV === 'production'
+  ? [process.env.FRONTEND_URL || 'http://localhost:3000']
+  : [process.env.FRONTEND_URL || 'http://localhost:3000', 'http://localhost:3000', 'http://localhost:3001'];
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   })

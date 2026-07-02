@@ -51,18 +51,17 @@ const getAvailableCars = async (req, res) => {
 
     const bookedCarIds = new Set(overlappingBookings.map((b) => b.carId.toString()));
 
-    const availableCars = allCars.filter((c) => !bookedCarIds.has(c._id.toString()));
-
     // Compute pricing for this booking period
     const hours = Math.ceil((end - start) / (1000 * 60 * 60));
     const isWeekend = [0, 6].includes(start.getDay());
 
-    const carsWithPricing = availableCars.map((car) => {
+    const carsWithPricing = allCars.map((car) => {
       const rate = isWeekend ? car.weekendPrice : car.regularPrice;
       const bookingFare = hours * rate;
       const gst = Math.round(bookingFare * 0.18);
       return {
         ...car.toObject(),
+        isAvailable: !bookedCarIds.has(car._id.toString()),
         computedFare: {
           hours,
           ratePerHour: rate,
@@ -74,6 +73,9 @@ const getAvailableCars = async (req, res) => {
       };
     });
 
+    // Available cars first, sold-out cars pushed to the end
+    carsWithPricing.sort((a, b) => (a.isAvailable === b.isAvailable ? 0 : a.isAvailable ? -1 : 1));
+
     // Pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const paginated = carsWithPricing.slice(skip, skip + parseInt(limit));
@@ -81,9 +83,9 @@ const getAvailableCars = async (req, res) => {
     return res.json({
       success: true,
       data: paginated,
-      total: availableCars.length,
+      total: carsWithPricing.length,
       page: parseInt(page),
-      pages: Math.ceil(availableCars.length / parseInt(limit)),
+      pages: Math.ceil(carsWithPricing.length / parseInt(limit)),
     });
   } catch (error) {
     console.error('getAvailableCars error:', error);
@@ -94,7 +96,7 @@ const getAvailableCars = async (req, res) => {
 // GET /api/cars/popular
 const getPopularCars = async (req, res) => {
   try {
-    const { city, limit = 6 } = req.query;
+    const { city, limit = 6, startTime, endTime } = req.query;
 
     let cityFilter = {};
     if (city) {
@@ -144,7 +146,29 @@ const getPopularCars = async (req, res) => {
       sorted.push(...extras);
     }
 
-    return res.json({ success: true, data: sorted.slice(0, parseInt(limit)) });
+    let result = sorted.slice(0, parseInt(limit));
+
+    // Availability check — a chosen date/time window if given, otherwise
+    // "right now" so the homepage can flag cars that are currently out on rent.
+    let start = startTime ? new Date(startTime) : null;
+    let end = endTime ? new Date(endTime) : null;
+    if (!start || !end || isNaN(start) || isNaN(end) || start >= end) {
+      start = new Date();
+      end = new Date();
+    }
+    const carIds = result.map((c) => c._id);
+    const overlappingBookings = await Booking.find({
+      carId: { $in: carIds },
+      status: { $in: ['confirmed', 'active'] },
+      $or: [{ startTime: { $lte: end }, endTime: { $gte: start } }],
+    }).select('carId');
+    const bookedCarIds = new Set(overlappingBookings.map((b) => b.carId.toString()));
+
+    result = result
+      .map((c) => ({ ...c.toObject(), isAvailable: !bookedCarIds.has(c._id.toString()) }))
+      .sort((a, b) => (a.isAvailable === b.isAvailable ? 0 : a.isAvailable ? -1 : 1));
+
+    return res.json({ success: true, data: result });
   } catch (error) {
     console.error('getPopularCars error:', error);
     return res.status(500).json({ success: false, message: 'Failed to fetch popular cars' });

@@ -7,6 +7,8 @@ const {
   exportBookings,
   updateBookingStatus,
   updateBooking,
+  updateVehicleVerification,
+  sendInvoiceWhatsApp,
 } = require('../../controllers/admin/adminBookingsController');
 const {
   uploadBookingMedia,
@@ -28,6 +30,7 @@ router.get('/', getAllBookings);
 router.post('/offline', createOfflineBooking);
 router.get('/:id', getBookingDetail);
 router.patch('/:id/status', updateBookingStatus);
+router.patch('/:id/verification', updateVehicleVerification);
 router.put('/:id', updateBooking);
 
 // Media (video/photo) upload — up to 5 files per call
@@ -46,5 +49,8 @@ router.get('/:id/user-docs', getBookingUserDocs);
 
 // Send car documents to customer via WhatsApp
 router.post('/:id/send-car-docs', sendCarDocsWhatsApp);
+
+// Upload invoice PDF + send to customer via WhatsApp
+router.post('/:id/invoice/send-whatsapp', getUploader('booking-invoices').single('file'), sendInvoiceWhatsApp);
 
 module.exports = router;

@@ -35,17 +35,29 @@ const getBlogById = async (req, res) => {
   }
 };
 
+// Strip HTML tags and truncate for a fallback excerpt when admin doesn't provide one
+const deriveExcerpt = (html = '', max = 160) => {
+  const text = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  return text.length > max ? text.slice(0, max).trim() + '…' : text;
+};
+
 // POST /api/admin/blogs
 const createBlog = async (req, res) => {
   try {
-    const { title, slug: customSlug, ...rest } = req.body;
+    const { title, slug: customSlug, isPublished, excerpt, ...rest } = req.body;
     const slug = customSlug ||
       title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') +
       '-' + Date.now().toString().slice(-4);
 
     const coverImage = getFileUrl(req.file) || rest.coverImage;
+    const published = isPublished === 'true' || isPublished === true;
 
-    const blog = await Blog.create({ title, slug, ...rest, coverImage });
+    const blog = await Blog.create({
+      title, slug, ...rest, coverImage,
+      excerpt: excerpt || deriveExcerpt(rest.content),
+      isPublished: published,
+      publishedAt: published ? new Date() : undefined,
+    });
     return res.status(201).json({ success: true, data: blog });
   } catch (error) {
     if (error.code === 11000) {
@@ -63,6 +75,16 @@ const updateBlog = async (req, res) => {
     if (req.file) {
       updates.coverImage = getFileUrl(req.file);
     }
+    if (updates.isPublished !== undefined) {
+      const published = updates.isPublished === 'true' || updates.isPublished === true;
+      updates.isPublished = published;
+      if (published) {
+        const existing = await Blog.findById(req.params.id, 'publishedAt');
+        if (existing && !existing.publishedAt) updates.publishedAt = new Date();
+      }
+    }
+    if (updates.excerpt === '') delete updates.excerpt;
+    if (!updates.excerpt && updates.content) updates.excerpt = deriveExcerpt(updates.content);
 
     const blog = await Blog.findByIdAndUpdate(req.params.id, updates, {
       new: true, runValidators: true,

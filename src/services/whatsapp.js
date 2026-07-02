@@ -107,12 +107,33 @@ const sendBookingConfirmedToUser = async (user, booking, car) => {
   ]);
 };
 
+// ─── Template 1b — Booking Confirmed V2 (User) ────────────────────────────────
+// Campaign: vk_booking_confirmed_v2 — new template (requires AiSensy approval)
+// Same param shape as vk_booking_confirmed; swap the campaign name once approved.
+const sendBookingConfirmedV2ToUser = async (user, booking, car) => {
+  return sendTemplateMessage(user.mobile, 'vk_booking_confirmed_v2', [
+    user.name || 'Customer',
+    booking.bookingId,
+    car?.name || 'N/A',
+    fmtDate(booking.startTime),
+    fmtDate(booking.endTime),
+    booking.deliveryAddress || booking.pickupLocation || 'Our Office',
+    fmtAmount(booking.totalAmount),
+    fmtAmount(booking.amountPaid),
+  ]);
+};
+
+// ─── Admin mobile list ─────────────────────────────────────────────────────────
+// ADMIN_MOBILE supports a comma-separated list to notify multiple numbers
+const getAdminMobiles = () =>
+  (process.env.ADMIN_MOBILE || '').split(',').map((s) => s.trim()).filter(Boolean);
+
 // ─── Template 2 — New Booking Alert (Admin) ───────────────────────────────────
 // Campaign: vk_admin_new_booking
 // {{1}} booking_id  {{2}} customer_name  {{3}} mobile  {{4}} car
 // {{5}} pickup  {{6}} return  {{7}} delivery  {{8}} amount
 const notifyAdminNewBooking = async (booking) => {
-  return sendTemplateMessage(process.env.ADMIN_MOBILE, 'vk_admin_new_booking', [
+  const params = [
     booking.bookingId || booking._id?.toString()?.slice(-8),
     booking.userId?.name || 'Unknown',
     booking.userId?.mobile || 'N/A',
@@ -121,7 +142,8 @@ const notifyAdminNewBooking = async (booking) => {
     fmtDate(booking.endTime),
     booking.doorstepDelivery ? `Doorstep — ${booking.deliveryAddress || 'N/A'}` : 'Office Pickup',
     fmtAmount(booking.totalAmount),
-  ]);
+  ];
+  return Promise.all(getAdminMobiles().map((mobile) => sendTemplateMessage(mobile, 'vk_admin_new_booking', params)));
 };
 
 // Send a single media document via WhatsApp (session API — no template needed)
@@ -177,12 +199,10 @@ const sendCarDocsToCustomer = async (mobile, customerName, car, bookingId, avail
     return { success: true, errors: [] };
   }
 
-  // 2. TODO: send individual document files once NeoDove DOCUMENT-type template is approved.
-  // car_doc_link is a TEXT template — AiSensy ignores the media field for it.
-  // When the new DOCUMENT template is approved, replace 'PENDING_DOCUMENT_TEMPLATE' below
-  // with the approved template name (5 params: name, bookingId, car, regNo, docLabel).
   // 2. Send each doc via car_doc_link FILE template (5 params, media = actual file URL)
-  // {{1}}=name {{2}}=bookingId {{3}}=car {{4}}=regNo {{5}}=docLabel
+  // NOTE: car_doc_link must be approved on AiSensy as a Document-header template —
+  // AiSensy silently ignores the media field on TEXT-header templates.
+  // {{1}}=name {{2}}=bookingId {{3}}=car {{4}}=regNo {{5}}=downloadUrl (text backup link)
   // media.url = Cloudinary raw URL (no .pdf suffix — confirmed working, file is real PDF)
   for (const doc of availableDocs) {
     await new Promise(r => setTimeout(r, 2000));
@@ -191,7 +211,7 @@ const sendCarDocsToCustomer = async (mobile, customerName, car, bookingId, avail
     const result = await sendTemplateMessage(
       mobile,
       'car_doc_link',
-      [customerName, bookingId, car?.name || 'N/A', car?.registrationNo || 'N/A', doc.label],
+      [customerName, bookingId, car?.name || 'N/A', car?.registrationNo || 'N/A', mediaUrl],
       { url: mediaUrl, filename }
     );
     console.log(`[sendCarDocs] car_doc_link [${doc.label}]:`, JSON.stringify(result?.data));
@@ -201,6 +221,19 @@ const sendCarDocsToCustomer = async (mobile, customerName, car, bookingId, avail
   }
 
   return { success: true, errors };
+};
+
+// ─── Template — Booking Invoice (User) ────────────────────────────────────────
+// Campaign: vk_booking_invoice — Document-header template (requires AiSensy approval)
+// {{1}} name  {{2}} bookingId  {{3}} car  {{4}} total_amount  {{5}} paid_amount
+const sendBookingInvoiceToUser = async (mobile, customerName, booking, car, mediaUrl) => {
+  const filename = `Invoice_${booking.bookingId}.pdf`;
+  return sendTemplateMessage(
+    mobile,
+    'vk_booking_invoice',
+    [customerName, booking.bookingId, car?.name || 'N/A', fmtAmount(booking.totalAmount), fmtAmount(booking.amountPaid)],
+    { url: toMediaUrl(mediaUrl), filename }
+  );
 };
 
 // ─── Template 4 — Booking Cancelled (User) ────────────────────────────────────
@@ -232,7 +265,7 @@ const sendWhatsAppMessage = sendSessionMessage;
 
 const notifyAdminNewContact = async (contact) => {
   const msg = `New ${contact.type || 'General'} Inquiry!\nName: ${contact.name}\nMobile: ${contact.mobile}\nMessage: ${contact.message || 'N/A'}`;
-  return sendSessionMessage(process.env.ADMIN_MOBILE, msg);
+  return Promise.all(getAdminMobiles().map((mobile) => sendSessionMessage(mobile, msg)));
 };
 
 module.exports = {
@@ -242,7 +275,9 @@ module.exports = {
   notifyAdminNewBooking,
   notifyAdminNewContact,
   sendBookingConfirmedToUser,
+  sendBookingConfirmedV2ToUser,
   sendCarDocsToCustomer,
   sendBookingCancelledToUser,
   sendPickupReminder,
+  sendBookingInvoiceToUser,
 };

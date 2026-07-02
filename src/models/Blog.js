@@ -15,6 +15,7 @@ const BlogSchema = new mongoose.Schema({
   views: { type: Number, default: 0 },
   seoTitle: String,
   seoDescription: String,
+  seoKeywords: String,
 }, { timestamps: true });
 
 BlogSchema.index({ isPublished: 1, publishedAt: -1 });

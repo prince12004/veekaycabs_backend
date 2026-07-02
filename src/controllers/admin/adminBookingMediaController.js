@@ -4,6 +4,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const Booking = require('../../models/Booking');
 const BookingMedia = require('../../models/BookingMedia');
 const UserDocument = require('../../models/UserDocument');
+const User = require('../../models/User');
 const { getFileUrl } = require('../../middleware/upload');
 const { sendCarDocsToCustomer } = require('../../services/whatsapp');
 
@@ -445,6 +446,14 @@ const sendCarDocsWhatsApp = async (req, res) => {
         return res.status(400).json({ success: false, message: 'Customer has no valid mobile. Provide a 10-digit overrideMobile.' });
       }
       mobile = overrideMobile;
+
+      // Persist the override onto this customer's account so future sends
+      // (invoices, confirmations, etc.) don't need it re-typed each time.
+      // Skip silently if another account already owns this number.
+      const existing = await User.findOne({ mobile: overrideMobile });
+      if (!existing) {
+        await User.findByIdAndUpdate(booking.userId._id, { mobile: overrideMobile }, { runValidators: true });
+      }
     }
 
     const car = booking.carId;
