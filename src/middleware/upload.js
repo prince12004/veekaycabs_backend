@@ -38,7 +38,10 @@ const uploadToCloudinary = (folder) =>
         const isPdf   = file.mimetype === 'application/pdf';
         return {
           folder: `veekaycabs/${folder}`,
-          public_id: uuidv4(),
+          // Raw resources need the extension in the public_id itself — Cloudinary
+          // derives Content-Type from it. Without ".pdf" here, raw PDFs are served
+          // as application/octet-stream, which WhatsApp on mobile saves as ".bin".
+          public_id: isPdf ? `${uuidv4()}.pdf` : uuidv4(),
           resource_type: isVideo ? 'video' : isPdf ? 'raw' : 'image',
           allowed_formats: isVideo ? ALLOWED_VIDEO_FORMATS : ALLOWED_IMAGE_FORMATS,
         };

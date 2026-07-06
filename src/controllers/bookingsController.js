@@ -6,7 +6,7 @@ const User = require('../models/User');
 const { createOrder } = require('../services/razorpay');
 const { sendBookingConfirmation } = require('../services/email');
 const { sendBookingConfirmationSms } = require('../services/sms');
-const { notifyAdminNewBooking } = require('../services/whatsapp');
+const { notifyAdminNewBooking, sendBookingCancelledToUser } = require('../services/whatsapp');
 const { v4: uuidv4 } = require('uuid');
 
 const generateBookingId = () => {
@@ -328,6 +328,9 @@ const cancelBooking = async (req, res) => {
       if (user) {
         const { sendCancellationEmail } = require('../services/email');
         await sendCancellationEmail(user, booking);
+        if (user.mobile && !String(user.mobile).startsWith('google_')) {
+          await sendBookingCancelledToUser(user, booking, booking.carId);
+        }
       }
     } catch (notifyErr) {
       console.error('Cancellation notification error:', notifyErr.message);

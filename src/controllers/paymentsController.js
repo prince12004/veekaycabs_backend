@@ -52,7 +52,7 @@ const verifyPayment = async (req, res) => {
 
     // ── Tempo Booking payment ─────────────────────────────────────────────────
     if (type === 'tempo') {
-      const tempoBooking = await TempoBooking.findById(bookingId).populate('userId');
+      const tempoBooking = await TempoBooking.findById(bookingId).populate('userId').populate('tempoId');
       if (!tempoBooking) {
         return res.status(404).json({ success: false, message: 'Tempo booking not found' });
       }
@@ -61,6 +61,22 @@ const verifyPayment = async (req, res) => {
       tempoBooking.status = 'confirmed';
       await tempoBooking.save();
       await User.findByIdAndUpdate(tempoBooking.userId, { $inc: { totalBookings: 1 } });
+
+      try {
+        await notifyAdminNewBooking({
+          bookingId: tempoBooking.bookingId,
+          userId: tempoBooking.userId,
+          carId: { name: tempoBooking.tempoId?.name || 'Tempo Traveller' },
+          startTime: tempoBooking.startTime,
+          endTime: tempoBooking.endTime,
+          doorstepDelivery: true,
+          deliveryAddress: `${tempoBooking.pickupCity} → ${tempoBooking.destination}`,
+          totalAmount: tempoBooking.totalAmount,
+        });
+      } catch (notifyErr) {
+        console.error('Tempo booking admin notification error (non-fatal):', notifyErr.message);
+      }
+
       return res.json({
         success: true,
         message: 'Tempo booking confirmed!',
@@ -135,7 +151,7 @@ const razorpayWebhook = async (req, res) => {
       const payment = event.payload.payment.entity;
       const orderId = payment.order_id;
 
-      const booking = await Booking.findOne({ razorpayOrderId: orderId });
+      const booking = await Booking.findOne({ razorpayOrderId: orderId }).populate('carId').populate('userId');
       if (booking && booking.status === 'pending') {
         booking.razorpayPaymentId = payment.id;
         booking.amountPaid = payment.amount / 100;
@@ -146,6 +162,12 @@ const razorpayWebhook = async (req, res) => {
           await Coupon.findOneAndUpdate({ code: booking.couponCode }, { $inc: { usedCount: 1 } });
         }
         await User.findByIdAndUpdate(booking.userId, { $inc: { totalBookings: 1 } });
+
+        try {
+          await notifyAdminNewBooking(booking);
+        } catch (notifyErr) {
+          console.error('Webhook admin notification error (non-fatal):', notifyErr.message);
+        }
       }
     }
 

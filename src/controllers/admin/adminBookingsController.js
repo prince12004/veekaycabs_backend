@@ -239,10 +239,14 @@ const updateBookingStatus = async (req, res) => {
     if (status && !allowed.includes(status)) {
       return res.status(400).json({ success: false, message: 'Invalid status' });
     }
+    const existing = await Booking.findById(req.params.id, 'totalAmount amountPaid');
+    if (!existing) return res.status(404).json({ success: false, message: 'Booking not found' });
+
     const update = {};
     if (status) update.status = status;
     if (amountPaid !== undefined) update.amountPaid = amountPaid;
     if (notes !== undefined) update.challanDetails = notes;
+    update.balanceDue = existing.totalAmount - (amountPaid !== undefined ? amountPaid : existing.amountPaid);
 
     const booking = await Booking.findByIdAndUpdate(req.params.id, { $set: update }, { new: true })
       .populate('userId', 'name mobile email')
@@ -258,6 +262,7 @@ const updateBookingStatus = async (req, res) => {
       if (status === 'confirmed' || status === 'active') {
         const car = booking.carId;
         sendBookingConfirmedV2ToUser(booking.userId, booking, car).catch(() => {});
+        notifyAdminNewBooking(booking).catch(() => {});
       } else if (status === 'cancelled') {
         sendBookingCancelledToUser(booking.userId, booking, booking.carId).catch(() => {});
       }

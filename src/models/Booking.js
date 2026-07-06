@@ -35,6 +35,7 @@ const BookingSchema = new mongoose.Schema({
   cancellationReason: { type: String },
   cancelledAt: { type: Date },
   refundAmount: { type: Number, default: 0 },
+  pickupReminderSent: { type: Boolean, default: false },
   billUrl: { type: String },
   isOffline: { type: Boolean, default: false },
   odometerStart: { type: Number },

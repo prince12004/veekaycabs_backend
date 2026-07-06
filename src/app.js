@@ -43,6 +43,7 @@ const adminOffersRoutes = require('./routes/admin/offers');
 const adminPolicyRoutes = require('./routes/admin/policy');
 const adminWhatsappRoutes = require('./routes/admin/whatsapp');
 const adminVehicleVerificationRoutes = require('./routes/admin/vehicleVerification');
+const adminGpsRoutes = require('./routes/admin/gps');
 const tempoRoutes = require('./routes/tempo');
 const favoritesRoutes = require('./routes/favorites');
 const publicRoutes = require('./routes/public');
@@ -52,11 +53,11 @@ const app = express();
 // Security, compression & logging
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression()); // gzip all responses — reduces bandwidth ~70%
-// In development, Next.js may bind to 3000 or fall back to 3001 depending on
+// In development, Next.js may bind to 3000 or fall back to 3000 depending on
 // what's free — accept both so local CORS doesn't break on a port bounce.
 const allowedOrigins = process.env.NODE_ENV === 'production'
   ? [process.env.FRONTEND_URL || 'http://localhost:3000']
-  : [process.env.FRONTEND_URL || 'http://localhost:3000', 'http://localhost:3000', 'http://localhost:3001'];
+  : [process.env.FRONTEND_URL || 'http://localhost:3000', 'http://localhost:3000', 'http://localhost:3000'];
 
 app.use(
   cors({
@@ -122,6 +123,7 @@ app.use('/api/admin/offers', adminOffersRoutes);
 app.use('/api/admin/policy', adminPolicyRoutes);
 app.use('/api/admin/whatsapp', adminWhatsappRoutes);
 app.use('/api/admin/vehicle-verification', adminVehicleVerificationRoutes);
+app.use('/api/admin/gps', adminGpsRoutes);
 
 // Health check
 app.get('/health', (req, res) =>

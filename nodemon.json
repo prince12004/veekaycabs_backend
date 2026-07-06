@@ -2,6 +2,6 @@
   "watch": ["src"],
   "ext": "js,mjs,cjs,json",
   "ignore": ["node_modules", ".git", "uploads", "*.log"],
-  "delay": "1500",
+  "delay": "300",
   "legacyWatch": true
 }

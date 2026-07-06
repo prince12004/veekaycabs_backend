@@ -43,6 +43,37 @@ const startServer = async () => {
     }
   });
 
+  // Cron: Every 15 min — send WhatsApp pickup reminder ~2h before startTime
+  cron.schedule('*/15 * * * *', async () => {
+    try {
+      const Booking = require('./models/Booking');
+      const { sendPickupReminder } = require('./services/whatsapp');
+      const now = new Date();
+      const windowEnd = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+      const dueBookings = await Booking.find({
+        status: 'confirmed',
+        pickupReminderSent: false,
+        startTime: { $gte: now, $lte: windowEnd },
+      })
+        .populate('userId', 'name mobile')
+        .populate('carId', 'name');
+
+      for (const booking of dueBookings) {
+        const mobile = booking.userId?.mobile;
+        if (mobile && !String(mobile).startsWith('google_')) {
+          await sendPickupReminder(booking.userId, booking, booking.carId);
+        }
+        booking.pickupReminderSent = true;
+        await booking.save();
+      }
+      if (dueBookings.length > 0) {
+        console.log(`[Cron] Sent ${dueBookings.length} pickup reminder(s)`);
+      }
+    } catch (err) {
+      console.error('[Cron] Error sending pickup reminders:', err.message);
+    }
+  });
+
   // Seed initial cities if none exist
   const City = require('./models/City');
   const cityCount = await City.countDocuments();

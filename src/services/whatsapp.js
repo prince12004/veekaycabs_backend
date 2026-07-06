@@ -88,10 +88,10 @@ const fmtDate = (d) =>
     hour: '2-digit', minute: '2-digit', hour12: true,
   });
 
-const fmtAmount = (n) => `Rs. ${Number(n || 0).toLocaleString('en-IN')}`;
+const fmtAmount = (n) => Number(n || 0).toLocaleString('en-IN');
 
 // ─── Template 1 — Booking Confirmed (User) ────────────────────────────────────
-// Campaign: vk_booking_confirmed
+// Campaign: vk_booking_confirmed (original 8-field version)
 // {{1}} name  {{2}} booking_id  {{3}} car  {{4}} pickup  {{5}} return
 // {{6}} location  {{7}} total  {{8}} paid
 const sendBookingConfirmedToUser = async (user, booking, car) => {
@@ -108,8 +108,11 @@ const sendBookingConfirmedToUser = async (user, booking, car) => {
 };
 
 // ─── Template 1b — Booking Confirmed V2 (User) ────────────────────────────────
-// Campaign: vk_booking_confirmed_v2 — new template (requires AiSensy approval)
-// Same param shape as vk_booking_confirmed; swap the campaign name once approved.
+// Campaign: vk_booking_confirmed_v2 — approved 11-field version (confirmed
+// against the live NeoDove template body on 2026-07-04).
+// {{1}} name  {{2}} booking_id  {{3}} car  {{4}} pickup  {{5}} return
+// {{6}} location  {{7}} base_fare  {{8}} security_deposit  {{9}} total
+// {{10}} paid  {{11}} balance_due
 const sendBookingConfirmedV2ToUser = async (user, booking, car) => {
   return sendTemplateMessage(user.mobile, 'vk_booking_confirmed_v2', [
     user.name || 'Customer',
@@ -118,8 +121,11 @@ const sendBookingConfirmedV2ToUser = async (user, booking, car) => {
     fmtDate(booking.startTime),
     fmtDate(booking.endTime),
     booking.deliveryAddress || booking.pickupLocation || 'Our Office',
+    fmtAmount(booking.bookingFare),
+    fmtAmount(booking.securityDeposit),
     fmtAmount(booking.totalAmount),
     fmtAmount(booking.amountPaid),
+    fmtAmount(booking.balanceDue),
   ]);
 };
 
@@ -176,8 +182,10 @@ const sendDocumentMessage = async (mobile, docUrl, filename, caption = '') => {
   }
 };
 
-// Strip query params only — Cloudinary raw upload public_ids have no extension,
-// appending .pdf returns 404. The raw URL serves the actual PDF (verified by magic bytes).
+// Strip query params only. Uploads created before the public_id fix in
+// middleware/upload.js have no ".pdf" suffix on the raw URL — appending one
+// now returns 404 since it doesn't match the stored public_id. New uploads
+// already end in ".pdf" and serve with the correct Content-Type.
 const toMediaUrl = (url) => url.split('?')[0];
 
 // ─── Template 3 — Car Docs to Customer ───────────────────────────────────────
@@ -228,12 +236,14 @@ const sendCarDocsToCustomer = async (mobile, customerName, car, bookingId, avail
 // {{1}} name  {{2}} bookingId  {{3}} car  {{4}} total_amount  {{5}} paid_amount
 const sendBookingInvoiceToUser = async (mobile, customerName, booking, car, mediaUrl) => {
   const filename = `Invoice_${booking.bookingId}.pdf`;
-  return sendTemplateMessage(
+  const result = await sendTemplateMessage(
     mobile,
     'vk_booking_invoice',
     [customerName, booking.bookingId, car?.name || 'N/A', fmtAmount(booking.totalAmount), fmtAmount(booking.amountPaid)],
     { url: toMediaUrl(mediaUrl), filename }
   );
+  console.log('[sendBookingInvoiceToUser] vk_booking_invoice response:', JSON.stringify(result?.data), 'media url:', toMediaUrl(mediaUrl));
+  return result;
 };
 
 // ─── Template 4 — Booking Cancelled (User) ────────────────────────────────────
