@@ -49,7 +49,7 @@ const createCar = async (req, res) => {
     const {
       name, registrationNo, modelYear, type, fuel, transmission,
       seats, regularPrice, weekendPrice, securityDeposit, doorstepDeliveryCharge, kmPackage,
-      cityId, gpsDeviceId, features,
+      cityId, gpsDeviceId, features, odometer,
     } = req.body;
 
     const images = (req.files || []).map(getFileUrl).filter(Boolean);
@@ -57,11 +57,15 @@ const createCar = async (req, res) => {
     if (req.body.documents) {
       try { documents = JSON.parse(req.body.documents); } catch {}
     }
+    let maintenance = {};
+    if (req.body.maintenance) {
+      try { maintenance = JSON.parse(req.body.maintenance); } catch {}
+    }
 
     const car = await Car.create({
       name, registrationNo, modelYear, type, fuel, transmission,
       seats, regularPrice, weekendPrice, securityDeposit, doorstepDeliveryCharge, kmPackage,
-      cityId, gpsDeviceId, images, documents,
+      cityId, gpsDeviceId, images, documents, odometer, maintenance,
       features: typeof features === 'string' ? JSON.parse(features) : features || [],
     });
 
@@ -85,12 +89,12 @@ const updateCar = async (req, res) => {
     const allowedFields = [
       'name', 'registrationNo', 'modelYear', 'type', 'fuel', 'transmission', 'seats',
       'regularPrice', 'weekendPrice', 'securityDeposit', 'doorstepDeliveryCharge', 'kmPackage',
-      'cityId', 'gpsDeviceId', 'features', 'documents', 'isActive',
+      'cityId', 'gpsDeviceId', 'features', 'documents', 'isActive', 'odometer', 'maintenance',
     ];
     const updates = {};
     allowedFields.forEach((field) => {
       if (req.body[field] !== undefined) {
-        if (field === 'documents' && typeof req.body[field] === 'string') {
+        if ((field === 'documents' || field === 'maintenance') && typeof req.body[field] === 'string') {
           try { updates[field] = JSON.parse(req.body[field]); } catch {}
         } else {
           updates[field] = req.body[field];
@@ -171,9 +175,13 @@ const getExpiryAlerts = async (req, res) => {
 
     const cars = await Car.find({ isActive: true }).populate('cityId', 'name');
 
+    // "Due soon" window for km-based maintenance, analogous to the 30-day
+    // window used for document expiry above.
+    const MAINTENANCE_WINDOW_KM = 1000;
+
     const alerts = [];
     cars.forEach((car) => {
-      const docTypes = ['insurance', 'puc', 'fitness', 'roadTax', 'rc'];
+      const docTypes = ['insurance', 'puc', 'fitness', 'roadTax', 'rc', 'permit'];
       docTypes.forEach((docType) => {
         const doc = car.documents?.[docType];
         if (doc?.expiry) {
@@ -193,9 +201,34 @@ const getExpiryAlerts = async (req, res) => {
           }
         }
       });
+
+      [
+        { docType: 'service', intervalKm: car.maintenance?.serviceIntervalKm, lastKm: car.maintenance?.lastServiceKm },
+        { docType: 'alignment', intervalKm: car.maintenance?.alignmentIntervalKm, lastKm: car.maintenance?.lastAlignmentKm },
+      ].forEach(({ docType, intervalKm, lastKm }) => {
+        if (!intervalKm) return;
+        const dueAtKm = (lastKm || 0) + intervalKm;
+        const kmLeft = dueAtKm - (car.odometer || 0);
+        if (kmLeft <= MAINTENANCE_WINDOW_KM) {
+          alerts.push({
+            carId: car._id,
+            carName: car.name,
+            registrationNo: car.registrationNo,
+            city: car.cityId?.name,
+            docType,
+            dueAtKm,
+            status: kmLeft < 0 ? 'expired' : 'expiring_soon',
+            kmLeft,
+          });
+        }
+      });
     });
 
-    alerts.sort((a, b) => new Date(a.expiry) - new Date(b.expiry));
+    alerts.sort((a, b) => {
+      const aVal = a.expiry ? new Date(a.expiry).getTime() : Date.now() + a.kmLeft * 1000;
+      const bVal = b.expiry ? new Date(b.expiry).getTime() : Date.now() + b.kmLeft * 1000;
+      return aVal - bVal;
+    });
 
     return res.json({ success: true, data: alerts, total: alerts.length });
   } catch (error) {

@@ -19,12 +19,22 @@ const CarSchema = new mongoose.Schema({
   isActive: { type: Boolean, default: true },
   slug: { type: String, unique: true },
   features: [String],
+  odometer: { type: Number, default: 0 }, // current km reading, updated manually by admin
+  maintenance: {
+    serviceIntervalKm: { type: Number, default: 5000 },
+    lastServiceKm: { type: Number, default: 0 },
+    lastServiceDate: { type: Date },
+    alignmentIntervalKm: { type: Number, default: 10000 },
+    lastAlignmentKm: { type: Number, default: 0 },
+    lastAlignmentDate: { type: Date },
+  },
   documents: {
     insurance: { url: String, expiry: Date },
     puc: { url: String, expiry: Date },
     fitness: { url: String, expiry: Date },
     roadTax: { url: String, expiry: Date },
     rc: { url: String, expiry: Date },
+    permit: { url: String, expiry: Date },
   },
   // RC verification result via QuickEKYC's RC Advance endpoint
   // (POST /rc/rc_advance). `raw` always preserves the untouched API

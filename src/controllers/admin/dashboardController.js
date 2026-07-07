@@ -137,7 +137,7 @@ const getDashboardStats = async (req, res) => {
     const in30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
     const expiryAlerts = [];
     for (const car of allCarsForExpiry) {
-      for (const [key, label] of [['rc','RC'], ['insurance','Insurance'], ['puc','PUC Certificate'], ['fitness','Fitness Certificate'], ['roadTax','Road Tax']]) {
+      for (const [key, label] of [['rc','RC'], ['insurance','Insurance'], ['puc','PUC Certificate'], ['fitness','Fitness Certificate'], ['roadTax','Road Tax'], ['permit','Permit']]) {
         const expiry = car.documents?.[key]?.expiry;
         if (!expiry) continue;
         const exp = new Date(expiry);
@@ -151,6 +151,27 @@ const getDashboardStats = async (req, res) => {
             expiry: exp.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
             daysLeft,
             level: daysLeft <= 7 ? 'critical' : daysLeft <= 15 ? 'warning' : 'ok',
+          });
+        }
+      }
+
+      // Service/alignment due — km-based, analogous 1000km "due soon" window
+      for (const [key, label] of [['serviceIntervalKm', 'Service'], ['alignmentIntervalKm', 'Alignment']]) {
+        const intervalKm = car.maintenance?.[key];
+        if (!intervalKm) continue;
+        const lastKm = car.maintenance?.[key === 'serviceIntervalKm' ? 'lastServiceKm' : 'lastAlignmentKm'] || 0;
+        const dueAtKm = lastKm + intervalKm;
+        const kmLeft = dueAtKm - (car.odometer || 0);
+        if (kmLeft <= 1000) {
+          expiryAlerts.push({
+            carId: car._id,
+            car: car.name,
+            plate: car.registrationNo,
+            doc: label,
+            expiry: `Due at ${dueAtKm.toLocaleString('en-IN')} km`,
+            daysLeft: kmLeft,
+            level: kmLeft <= 200 ? 'critical' : kmLeft <= 500 ? 'warning' : 'ok',
+            unit: 'km',
           });
         }
       }
