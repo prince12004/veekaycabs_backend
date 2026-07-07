@@ -1,10 +1,16 @@
 const City = require('../../models/City');
+const Car = require('../../models/Car');
 
 // GET /api/admin/cities
 const getAllCities = async (req, res) => {
   try {
-    const cities = await City.find({}).sort({ name: 1 });
-    return res.json({ success: true, data: cities });
+    const cities = await City.find({}).sort({ name: 1 }).lean();
+    const counts = await Car.aggregate([
+      { $group: { _id: '$cityId', count: { $sum: 1 } } },
+    ]);
+    const countByCity = Object.fromEntries(counts.map((c) => [String(c._id), c.count]));
+    const withCounts = cities.map((c) => ({ ...c, carsCount: countByCity[String(c._id)] || 0 }));
+    return res.json({ success: true, data: withCounts });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Failed to fetch cities' });
   }
