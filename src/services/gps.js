@@ -48,4 +48,34 @@ const getLiveLocations = async (imeis = []) => {
   }
 };
 
-module.exports = { getLiveLocations, isConfigured };
+// ─── Reverse geocoding ─────────────────────────────────────────────────────
+// Millitrack never populates device.address for this account, so resolve a
+// human-readable address ourselves from lat/lng via OSM Nominatim (free, no
+// API key). Cache by rounded coordinates (~11m) since parked/idle cars would
+// otherwise re-geocode the same spot every poll.
+const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/reverse';
+const GEOCODE_CACHE_TTL_MS = 5 * 60 * 1000;
+const geocodeCache = new Map(); // key -> { address, expiresAt }
+
+const getAddress = async (lat, lng) => {
+  if (lat == null || lng == null) return null;
+  const key = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+  const cached = geocodeCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.address;
+
+  try {
+    const res = await axios.get(NOMINATIM_URL, {
+      params: { format: 'json', lat, lon: lng, zoom: 16 },
+      headers: { 'User-Agent': 'veekaycabs-admin-gps/1.0' },
+      timeout: 5000,
+    });
+    const address = res.data?.display_name || null;
+    geocodeCache.set(key, { address, expiresAt: Date.now() + GEOCODE_CACHE_TTL_MS });
+    return address;
+  } catch (error) {
+    console.error('[GPS] Reverse geocode error:', error.response?.data || error.message);
+    return cached?.address ?? null;
+  }
+};
+
+module.exports = { getLiveLocations, isConfigured, getAddress };

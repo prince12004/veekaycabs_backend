@@ -3,7 +3,7 @@ const router = express.Router();
 const { protectAdmin } = require('../../middleware/adminAuth');
 const Car = require('../../models/Car');
 const Booking = require('../../models/Booking');
-const { getLiveLocations, isConfigured } = require('../../services/gps');
+const { getLiveLocations, isConfigured, getAddress } = require('../../services/gps');
 
 router.use(protectAdmin);
 
@@ -41,7 +41,7 @@ router.get('/live', async (req, res) => {
     ).populate('userId', 'name').lean();
     const bookingByCarId = new Map(activeBookings.map((b) => [String(b.carId), b]));
 
-    const data = cars.map((car) => {
+    const data = await Promise.all(cars.map(async (car) => {
       const device = liveMap.get(car.gpsDeviceId);
       const booking = bookingByCarId.get(String(car._id));
       const base = {
@@ -54,7 +54,7 @@ router.get('/live', async (req, res) => {
       };
 
       if (!device) {
-        return { ...base, status: 'offline', speed: 0, battery: null, lat: null, lng: null, lastUpdate: null, address: null };
+        return { ...base, status: 'offline', speed: 0, battery: null, ignition: null, lat: null, lng: null, lastUpdate: null, address: null };
       }
 
       const lastUpdateMs = new Date(device.lastStatusUpdate || device.fixTime).getTime();
@@ -63,18 +63,22 @@ router.get('/live', async (req, res) => {
         ? 'offline'
         : device.attributes?.motion ? 'online' : 'idle';
 
+      const lat = device.valid ? device.latitude : null;
+      const lng = device.valid ? device.longitude : null;
+      const address = device.address || (await getAddress(lat, lng));
+
       return {
         ...base,
         status,
         speed: device.speed || 0,
         battery: device.attributes?.batteryLevel ?? null,
         ignition: device.attributes?.ignition ?? null,
-        lat: device.valid ? device.latitude : null,
-        lng: device.valid ? device.longitude : null,
+        lat,
+        lng,
         lastUpdate: device.lastStatusUpdate,
-        address: device.address,
+        address,
       };
-    });
+    }));
 
     return res.json({ success: true, configured: true, data });
   } catch (error) {
