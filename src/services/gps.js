@@ -6,6 +6,12 @@ const MILLITRACK_URL = 'https://mvts1.millitrack.com/api/middleMan/getDeviceInfo
 const isConfigured = () =>
   !!process.env.UFFIZIO_API_KEY && process.env.UFFIZIO_API_KEY !== 'placeholder';
 
+// Real trackers report a 15-digit IMEI. Cars without a physical device fitted
+// yet are seeded with placeholder ids (e.g. "GPS002") — Millitrack rejects the
+// *entire* batch request if even one non-IMEI id is mixed in, which was
+// knocking every car offline. Filter those out before calling the API.
+const isValidImei = (imei) => /^\d{15}$/.test(imei);
+
 // Millitrack blocks IPs that poll faster than every 10s, so cache the raw
 // response for slightly longer than that regardless of which IMEIs are asked
 // for — the admin GPS page always requests the full fleet anyway.
@@ -14,14 +20,15 @@ let cache = { map: new Map(), fetchedAt: 0 };
 
 // Returns a Map<deviceUniqueId, deviceObject> for the given IMEIs.
 const getLiveLocations = async (imeis = []) => {
-  if (!isConfigured() || imeis.length === 0) return new Map();
+  const validImeis = imeis.filter(isValidImei);
+  if (!isConfigured() || validImeis.length === 0) return new Map();
 
   if (Date.now() - cache.fetchedAt < CACHE_TTL_MS) {
     return cache.map;
   }
 
   const params = new URLSearchParams({ accessToken: process.env.UFFIZIO_API_KEY });
-  imeis.forEach((imei) => params.append('imei', imei));
+  validImeis.forEach((imei) => params.append('imei', imei));
 
   try {
     const res = await axios.get(`${MILLITRACK_URL}?${params.toString()}`, { timeout: 10000 });
