@@ -21,10 +21,10 @@ const CarSchema = new mongoose.Schema({
   features: [String],
   odometer: { type: Number, default: 0 }, // current km reading, updated manually by admin
   maintenance: {
-    serviceIntervalKm: { type: Number, default: 5000 },
+    serviceIntervalKm: { type: Number, default: 8000 },
     lastServiceKm: { type: Number, default: 0 },
     lastServiceDate: { type: Date },
-    alignmentIntervalKm: { type: Number, default: 10000 },
+    alignmentIntervalKm: { type: Number, default: 5000 },
     lastAlignmentKm: { type: Number, default: 0 },
     lastAlignmentDate: { type: Date },
   },
