@@ -44,6 +44,7 @@ const adminPolicyRoutes = require('./routes/admin/policy');
 const adminWhatsappRoutes = require('./routes/admin/whatsapp');
 const adminVehicleVerificationRoutes = require('./routes/admin/vehicleVerification');
 const adminGpsRoutes = require('./routes/admin/gps');
+const adminMaintenanceRoutes = require('./routes/admin/maintenance');
 const tempoRoutes = require('./routes/tempo');
 const favoritesRoutes = require('./routes/favorites');
 const publicRoutes = require('./routes/public');
@@ -124,6 +125,7 @@ app.use('/api/admin/policy', adminPolicyRoutes);
 app.use('/api/admin/whatsapp', adminWhatsappRoutes);
 app.use('/api/admin/vehicle-verification', adminVehicleVerificationRoutes);
 app.use('/api/admin/gps', adminGpsRoutes);
+app.use('/api/admin/maintenance', adminMaintenanceRoutes);
 
 // Health check
 app.get('/health', (req, res) =>
