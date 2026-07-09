@@ -4,27 +4,37 @@ const { getFileUrl } = require('../../middleware/upload');
 // GET /api/admin/cars
 const getAllCars = async (req, res) => {
   try {
-    const { city, type, isActive, page = 1, limit = 20 } = req.query;
+    const { city, type, isActive, search, page = 1, limit = 20 } = req.query;
     const filter = {};
     if (city) filter.cityId = city;
     if (type) filter.type = type;
     if (isActive !== undefined) filter.isActive = isActive === 'true';
+    if (search) {
+      const regex = new RegExp(search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      filter.$or = [{ name: regex }, { registrationNo: regex }];
+    }
 
-    const [total, cars] = await Promise.all([
+    const parsedLimit = Math.max(parseInt(limit) || 20, 1);
+    const parsedPage = Math.max(parseInt(page) || 1, 1);
+
+    const [total, activeCount, cars] = await Promise.all([
       Car.countDocuments(filter),
+      Car.countDocuments({ ...filter, isActive: true }),
       Car.find(filter)
         .populate('cityId', 'name slug')
         .sort({ createdAt: -1 })
-        .skip((parseInt(page) - 1) * parseInt(limit))
-        .limit(parseInt(limit)),
+        .skip((parsedPage - 1) * parsedLimit)
+        .limit(parsedLimit),
     ]);
 
     return res.json({
       success: true,
       data: cars,
       total,
-      page: parseInt(page),
-      pages: Math.ceil(total / parseInt(limit)),
+      activeCount,
+      inactiveCount: total - activeCount,
+      page: parsedPage,
+      pages: Math.ceil(total / parsedLimit) || 1,
     });
   } catch (error) {
     console.error('admin getAllCars error:', error);
