@@ -21,7 +21,8 @@ const getAll = async (req, res) => {
         .populate('carId', 'name registrationNo')
         .sort({ date: -1 })
         .skip((parseInt(page) - 1) * parseInt(limit))
-        .limit(parseInt(limit)),
+        .limit(parseInt(limit))
+        .lean(),
       MaintenanceLog.aggregate([{ $match: filter }, { $group: { _id: null, total: { $sum: '$amount' } } }]),
       MaintenanceLog.aggregate([
         { $match: filter },

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const {
   getAllCars,
+  getCarStats,
   getCarById,
   createCar,
   updateCar,
@@ -17,6 +18,7 @@ const { getUploader } = require('../../middleware/upload');
 router.use(protectAdmin);
 
 router.get('/expiry-alerts', getExpiryAlerts);
+router.get('/stats', getCarStats);
 router.get('/', getAllCars);
 router.get('/:id', getCarById);
 router.post('/', getUploader('cars').array('images', 10), createCar);

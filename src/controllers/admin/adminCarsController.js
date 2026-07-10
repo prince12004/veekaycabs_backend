@@ -1,30 +1,54 @@
 const Car = require('../../models/Car');
 const { getFileUrl } = require('../../middleware/upload');
 
+const EXPIRY_ALERT_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+
+// Shared by getAllCars' expiryAlert=true filter and getCarStats' badge count,
+// so the tile count and the filtered list can never drift apart.
+const expiryAlertCondition = () => ({
+  isActive: true,
+  $or: [
+    { 'documents.insurance.expiry': { $ne: null, $lte: new Date(Date.now() + EXPIRY_ALERT_WINDOW_MS) } },
+    { 'documents.puc.expiry': { $ne: null, $lte: new Date(Date.now() + EXPIRY_ALERT_WINDOW_MS) } },
+  ],
+});
+
 // GET /api/admin/cars
 const getAllCars = async (req, res) => {
   try {
-    const { city, type, isActive, search, page = 1, limit = 20 } = req.query;
-    const filter = {};
-    if (city) filter.cityId = city;
-    if (type) filter.type = type;
-    if (isActive !== undefined) filter.isActive = isActive === 'true';
+    const { city, type, isActive, search, expiryAlert, fields, page = 1, limit = 20 } = req.query;
+    const conditions = [];
+    if (city) conditions.push({ cityId: city });
+    if (type) conditions.push({ type });
+    if (isActive !== undefined) conditions.push({ isActive: isActive === 'true' });
     if (search) {
       const regex = new RegExp(search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-      filter.$or = [{ name: regex }, { registrationNo: regex }];
+      conditions.push({ $or: [{ name: regex }, { registrationNo: regex }] });
     }
+    // Matches the "critical" definition used for the fleet expiry-alert
+    // badge: active cars with insurance/PUC already expired or expiring
+    // within 14 days.
+    if (expiryAlert === 'true') conditions.push(expiryAlertCondition());
+    const filter = conditions.length ? { $and: conditions } : {};
 
     const parsedLimit = Math.max(parseInt(limit) || 20, 1);
     const parsedPage = Math.max(parseInt(page) || 1, 1);
 
+    // Callers that only need a few fields (e.g. a car picker dropdown) can
+    // request them explicitly to avoid shipping images/documents/features
+    // over the wire for every row.
+    let query = Car.find(filter);
+    if (fields) query = query.select(fields.split(',').join(' '));
+    else query = query.populate('cityId', 'name slug');
+
     const [total, activeCount, cars] = await Promise.all([
       Car.countDocuments(filter),
       Car.countDocuments({ ...filter, isActive: true }),
-      Car.find(filter)
-        .populate('cityId', 'name slug')
+      query
         .sort({ createdAt: -1 })
         .skip((parsedPage - 1) * parsedLimit)
-        .limit(parsedLimit),
+        .limit(parsedLimit)
+        .lean(),
     ]);
 
     return res.json({
@@ -39,6 +63,38 @@ const getAllCars = async (req, res) => {
   } catch (error) {
     console.error('admin getAllCars error:', error);
     return res.status(500).json({ success: false, message: 'Failed to fetch cars' });
+  }
+};
+
+// GET /api/admin/cars/stats — lightweight counts + city list for the fleet
+// page's summary tiles/filter dropdown, without shipping full car documents.
+const getCarStats = async (req, res) => {
+  try {
+    const [total, activeCount, cities, criticalExpiry] = await Promise.all([
+      Car.countDocuments({}),
+      Car.countDocuments({ isActive: true }),
+      Car.aggregate([
+        { $match: { cityId: { $ne: null } } },
+        { $group: { _id: '$cityId' } },
+        { $lookup: { from: 'cities', localField: '_id', foreignField: '_id', as: 'city' } },
+        { $unwind: '$city' },
+        { $project: { _id: 0, id: '$_id', name: '$city.name' } },
+        { $sort: { name: 1 } },
+      ]),
+      Car.countDocuments(expiryAlertCondition()),
+    ]);
+
+    return res.json({
+      success: true,
+      total,
+      activeCount,
+      inactiveCount: total - activeCount,
+      criticalExpiry,
+      cities,
+    });
+  } catch (error) {
+    console.error('admin getCarStats error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to fetch fleet stats' });
   }
 };
 
@@ -279,4 +335,4 @@ const uploadCarDocument = async (req, res) => {
   }
 };
 
-module.exports = { getAllCars, getCarById, createCar, updateCar, deleteCar, toggleCarStatus, getExpiryAlerts, uploadCarDocument };
+module.exports = { getAllCars, getCarStats, getCarById, createCar, updateCar, deleteCar, toggleCarStatus, getExpiryAlerts, uploadCarDocument };
