@@ -114,7 +114,7 @@ const createCar = async (req, res) => {
   try {
     const {
       name, registrationNo, modelYear, type, fuel, transmission,
-      seats, regularPrice, weekendPrice, securityDeposit, doorstepDeliveryCharge, kmPackage,
+      seats, regularPrice, weekendPrice, securityDeposit, doorstepDeliveryCharge, kmPackage, extraKmRate,
       cityId, gpsDeviceId, features, odometer,
     } = req.body;
 
@@ -130,7 +130,7 @@ const createCar = async (req, res) => {
 
     const car = await Car.create({
       name, registrationNo, modelYear, type, fuel, transmission,
-      seats, regularPrice, weekendPrice, securityDeposit, doorstepDeliveryCharge, kmPackage,
+      seats, regularPrice, weekendPrice, securityDeposit, doorstepDeliveryCharge, kmPackage, extraKmRate,
       cityId, gpsDeviceId, images, documents, odometer, maintenance,
       features: typeof features === 'string' ? JSON.parse(features) : features || [],
     });
@@ -154,7 +154,7 @@ const updateCar = async (req, res) => {
 
     const allowedFields = [
       'name', 'registrationNo', 'modelYear', 'type', 'fuel', 'transmission', 'seats',
-      'regularPrice', 'weekendPrice', 'securityDeposit', 'doorstepDeliveryCharge', 'kmPackage',
+      'regularPrice', 'weekendPrice', 'securityDeposit', 'doorstepDeliveryCharge', 'kmPackage', 'extraKmRate',
       'cityId', 'gpsDeviceId', 'features', 'documents', 'isActive', 'odometer', 'maintenance',
     ];
     const updates = {};

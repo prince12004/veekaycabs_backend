@@ -64,6 +64,38 @@ const BookingSchema = new mongoose.Schema({
     documents: { type: Boolean },
     recordedAt: { type: Date },
   },
+  // Final return-time settlement — captured when admin closes the booking
+  // after the car is returned. Kept embedded (not a separate collection)
+  // since it's always read/written together with the booking.
+  closingBill: {
+    totalKms: { type: Number },
+    kmsLimit: { type: Number },
+    extraKms: { type: Number },
+    extraKmRate: { type: Number },
+    // Late return — car came back after the scheduled endTime
+    actualReturnTime: { type: Date },
+    lateHours: { type: Number, default: 0 },
+    lateHourRate: { type: Number, default: 0 },
+    lateCharges: { type: Number, default: 0 },
+    pickupCharges: { type: Number, default: 0 },
+    dropCharges: { type: Number, default: 0 },
+    fastagStateTax: { type: Number, default: 0 },
+    allStateChallan: { type: Number, default: 0 },
+    overspeedingFine: { type: Number, default: 0 },
+    fuelCharges: { type: Number, default: 0 },
+    damageCharges: { type: Number, default: 0 },
+    washingCharges: { type: Number, default: 0 },
+    totalCharges: { type: Number },
+    advancePaid: { type: Number },
+    // positive = customer owes this; negative = refund owed to customer
+    settlementAmount: { type: Number },
+    notes: { type: String },
+    closedAt: { type: Date },
+    billPdfUrl: { type: String },
+    billSentAt: { type: Date },
+    refundPaid: { type: Boolean, default: false },
+    refundPaidAt: { type: Date },
+  },
   dentDetectionResult: {
     newDamageFound: { type: Boolean },
     damageCount: { type: Number },

@@ -2,7 +2,7 @@ const Booking = require('../../models/Booking');
 const Car = require('../../models/Car');
 const User = require('../../models/User');
 const { v4: uuidv4 } = require('uuid');
-const { sendBookingConfirmedV2ToUser, notifyAdminNewBooking, sendBookingCancelledToUser, sendBookingInvoiceToUser } = require('../../services/whatsapp');
+const { sendBookingConfirmedV2ToUser, notifyAdminNewBooking, sendBookingCancelledToUser, sendBookingInvoiceToUser, sendClosingBillToUser } = require('../../services/whatsapp');
 const { getFileUrl } = require('../../middleware/upload');
 
 const generateBookingId = () => {
@@ -281,20 +281,27 @@ const updateBooking = async (req, res) => {
     const update = {};
     if (startTime) update.startTime = new Date(startTime);
     if (endTime)   update.endTime   = new Date(endTime);
-    if (totalAmount !== undefined) {
-      update.totalAmount = totalAmount;
-      update.balanceDue  = totalAmount - (amountPaid !== undefined ? amountPaid : 0);
-    }
-    if (amountPaid !== undefined) {
-      update.amountPaid = amountPaid;
-      if (update.totalAmount !== undefined) {
-        update.balanceDue = update.totalAmount - amountPaid;
-      } else {
-        // recalculate balanceDue using existing totalAmount
-        const existing = await Booking.findById(req.params.id, 'totalAmount');
-        if (existing) update.balanceDue = existing.totalAmount - amountPaid;
+
+    if (totalAmount !== undefined || amountPaid !== undefined) {
+      const existing = await Booking.findById(req.params.id, 'totalAmount amountPaid closingBill');
+      if (!existing) return res.status(404).json({ success: false, message: 'Booking not found' });
+
+      const finalTotal = totalAmount !== undefined ? totalAmount : existing.totalAmount;
+      const finalPaid = amountPaid !== undefined ? amountPaid : existing.amountPaid;
+      if (totalAmount !== undefined) update.totalAmount = totalAmount;
+      if (amountPaid !== undefined)  update.amountPaid  = amountPaid;
+      update.balanceDue = finalTotal - finalPaid;
+
+      // If this booking was already closed, keep its final settlement bill
+      // in sync with a corrected payment figure — otherwise the stored
+      // closing bill (and any future WhatsApp send/reprint of it) would
+      // keep showing the old, now-stale refund/balance-due amount.
+      if (existing.closingBill?.closedAt && amountPaid !== undefined) {
+        update['closingBill.advancePaid'] = amountPaid;
+        update['closingBill.settlementAmount'] = (existing.closingBill.totalCharges || 0) - amountPaid;
       }
     }
+
     if (notes !== undefined)       update.challanDetails = notes;
     if (paymentMode !== undefined) update.paymentMode    = paymentMode;
 
@@ -350,6 +357,154 @@ const updateVehicleVerification = async (req, res) => {
   }
 };
 
+// PATCH /api/admin/bookings/:id/close — record return-time charges, compute
+// final settlement (balance due from / refund owed to customer), mark completed.
+// Security deposit is deliberately excluded from totalCharges — it's a
+// refundable hold already reflected in amountPaid, so any surplus over the
+// actual charges naturally nets out as a refund below.
+const closeBooking = async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+
+    const {
+      startingMeter, closingMeter, kmsLimit, extraKmRate, actualReturnTime, lateHourRate,
+      pickupCharges, dropCharges, fastagStateTax, allStateChallan, overspeedingFine, fuelCharges, damageCharges, washingCharges, notes,
+    } = req.body;
+
+    const num = (v) => (v === undefined || v === '' || v === null ? 0 : Number(v));
+
+    // The pickup odometer is normally recorded during return verification;
+    // if that step was skipped, let the admin supply it here instead of
+    // getting stuck.
+    if (booking.odometerStart === undefined || booking.odometerStart === null) {
+      if (startingMeter === undefined || startingMeter === '') {
+        return res.status(400).json({ success: false, message: 'Starting (pickup) meter reading is required — it was never recorded for this booking' });
+      }
+      booking.odometerStart = num(startingMeter);
+    }
+
+    if (closingMeter === undefined || closingMeter === '') {
+      return res.status(400).json({ success: false, message: 'Closing meter reading is required' });
+    }
+
+    const totalKms = Math.max(0, num(closingMeter) - booking.odometerStart);
+    const limit = num(kmsLimit);
+    const extraKms = Math.max(0, totalKms - limit);
+    const extraKmCharge = extraKms * num(extraKmRate);
+
+    // Late return — car came back after the scheduled endTime. Charged in
+    // whole hours at the given hourly rate (defaults to the car's own
+    // hourly rental rate on the frontend, but always editable).
+    let lateHours = 0;
+    let lateCharges = 0;
+    const returnTime = actualReturnTime ? new Date(actualReturnTime) : null;
+    if (returnTime && !isNaN(returnTime) && returnTime > booking.endTime) {
+      lateHours = Math.ceil((returnTime - booking.endTime) / (60 * 60 * 1000));
+      lateCharges = lateHours * num(lateHourRate);
+    }
+
+    const charges = {
+      pickupCharges: num(pickupCharges),
+      dropCharges: num(dropCharges),
+      fastagStateTax: num(fastagStateTax),
+      allStateChallan: num(allStateChallan),
+      overspeedingFine: num(overspeedingFine),
+      fuelCharges: num(fuelCharges),
+      damageCharges: num(damageCharges),
+      washingCharges: num(washingCharges),
+    };
+    const extraChargesTotal = Object.values(charges).reduce((a, b) => a + b, 0);
+
+    const totalCharges = Math.round(
+      (booking.bookingFare || 0) + (booking.gst || 0) - (booking.discount || 0) +
+      (booking.doorstepCharge || 0) + extraKmCharge + lateCharges + extraChargesTotal
+    );
+    const advancePaid = booking.amountPaid || 0;
+    const settlementAmount = totalCharges - advancePaid;
+
+    booking.odometerEnd = num(closingMeter);
+    booking.extraKmCharge = extraKmCharge;
+    booking.status = 'completed';
+    booking.closingBill = {
+      totalKms, kmsLimit: limit, extraKms, extraKmRate: num(extraKmRate),
+      actualReturnTime: returnTime && !isNaN(returnTime) ? returnTime : undefined,
+      lateHours, lateHourRate: num(lateHourRate), lateCharges,
+      ...charges,
+      totalCharges, advancePaid, settlementAmount,
+      notes: notes || '',
+      closedAt: new Date(),
+      refundPaid: false,
+    };
+
+    await booking.save();
+    const populated = await Booking.findById(booking._id)
+      .populate('userId', 'name mobile email')
+      .populate('carId', 'name registrationNo type')
+      .populate('cityId', 'name');
+
+    return res.json({ success: true, data: populated });
+  } catch (error) {
+    console.error('admin closeBooking error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to close booking' });
+  }
+};
+
+// PATCH /api/admin/bookings/:id/refund-paid — manual confirmation that a
+// computed refund was actually paid out to the customer (cash/UPI/bank,
+// outside this system). No payment API is called here by design.
+const markRefundPaid = async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+    if (!booking.closingBill || booking.closingBill.settlementAmount === undefined || booking.closingBill.settlementAmount >= 0) {
+      return res.status(400).json({ success: false, message: 'No refund is due on this booking' });
+    }
+    booking.closingBill.refundPaid = true;
+    booking.closingBill.refundPaidAt = new Date();
+    await booking.save();
+    return res.json({ success: true, data: booking });
+  } catch (error) {
+    console.error('admin markRefundPaid error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to update refund status' });
+  }
+};
+
+// POST /api/admin/bookings/:id/closing-bill/send-whatsapp — upload closing-bill PDF + send via WhatsApp
+const sendClosingBillWhatsApp = async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, message: 'Bill PDF file required' });
+
+    const booking = await Booking.findById(req.params.id)
+      .populate('userId', 'name mobile email')
+      .populate('carId', 'name registrationNo type');
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+    if (!booking.closingBill?.closedAt) {
+      return res.status(400).json({ success: false, message: 'Close the booking before sending the final bill' });
+    }
+
+    const mobile = booking.userId?.mobile;
+    if (!mobile || String(mobile).startsWith('google_')) {
+      return res.status(400).json({ success: false, message: 'Customer has no valid WhatsApp number on file' });
+    }
+
+    const mediaUrl = getFileUrl(req.file);
+    const result = await sendClosingBillToUser(mobile, booking.userId?.name || 'Customer', booking, booking.carId, mediaUrl);
+    if (!result.success) {
+      return res.status(502).json({ success: false, message: result.error || 'Failed to send bill via WhatsApp' });
+    }
+
+    booking.closingBill.billPdfUrl = mediaUrl;
+    booking.closingBill.billSentAt = new Date();
+    await booking.save();
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('admin sendClosingBillWhatsApp error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to send bill' });
+  }
+};
+
 // POST /api/admin/bookings/:id/invoice/send-whatsapp — upload PDF + send via WhatsApp
 const sendInvoiceWhatsApp = async (req, res) => {
   try {
@@ -377,4 +532,4 @@ const sendInvoiceWhatsApp = async (req, res) => {
   }
 };
 
-module.exports = { getAllBookings, getBookingDetail, createOfflineBooking, exportBookings, updateBookingStatus, updateBooking, updateVehicleVerification, sendInvoiceWhatsApp };
+module.exports = { getAllBookings, getBookingDetail, createOfflineBooking, exportBookings, updateBookingStatus, updateBooking, updateVehicleVerification, sendInvoiceWhatsApp, closeBooking, markRefundPaid, sendClosingBillWhatsApp };

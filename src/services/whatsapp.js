@@ -246,6 +246,53 @@ const sendBookingInvoiceToUser = async (mobile, customerName, booking, car, medi
   return result;
 };
 
+// ─── Template — Closing Bill / Return Settlement (User) ───────────────────────
+// Campaign: vk_closing_bill — approved AiSensy document-header template
+// (verified directly against the live template in the AiSensy dashboard):
+//   "Hi {{1}}, 👋
+//    Your final closing bill for Booking {{2}} ({{3}}) is attached.
+//    📅 Booking Duration: {{4}}
+//    💰 Total Fare: ₹{{5}}
+//    💵 Amount Paid: ₹{{6}}
+//    💳 Balance Due: ₹{{7}}
+//    If you have any questions, please contact our support team.
+//    Thank you for choosing Veekay Cabs! 🚗"
+// {{1}} name  {{2}} bookingId  {{3}} car  {{4}} duration  {{5}} total_fare
+// {{6}} amount_paid  {{7}} balance_due — exactly 7 params, no security-deposit
+// line (the deposit is already folded into amount_paid/balance_due upstream).
+// NOTE: the template's {{7}} line always reads "Balance Due" — it can't
+// reword itself for a refund case, so when settlementAmount is negative this
+// still shows the absolute figure under that same label.
+const CLOSING_BILL_CAMPAIGN = 'vk_closing_bill';
+const fmtDuration = (booking) => {
+  const hrs = Math.round((new Date(booking.endTime) - new Date(booking.startTime)) / (1000 * 60 * 60));
+  if (hrs < 24) return `${hrs} hr${hrs !== 1 ? 's' : ''}`;
+  const days = Math.round(hrs / 24);
+  return `${days} day${days !== 1 ? 's' : ''}`;
+};
+const sendClosingBillToUser = async (mobile, customerName, booking, car, mediaUrl) => {
+  const filename = `Final_Bill_${booking.bookingId}.pdf`;
+  const totalFare = booking.closingBill?.totalCharges ?? 0;
+  const amountPaid = booking.closingBill?.advancePaid ?? booking.amountPaid ?? 0;
+  const balanceDue = Math.abs(booking.closingBill?.settlementAmount ?? 0);
+  const result = await sendTemplateMessage(
+    mobile,
+    CLOSING_BILL_CAMPAIGN,
+    [
+      customerName,
+      booking.bookingId,
+      car?.name || 'N/A',
+      fmtDuration(booking),
+      fmtAmount(totalFare),
+      fmtAmount(amountPaid),
+      fmtAmount(balanceDue),
+    ],
+    { url: toMediaUrl(mediaUrl), filename }
+  );
+  console.log(`[sendClosingBillToUser] ${CLOSING_BILL_CAMPAIGN} response:`, JSON.stringify(result?.data), 'media url:', toMediaUrl(mediaUrl));
+  return result;
+};
+
 // ─── Template 4 — Booking Cancelled (User) ────────────────────────────────────
 // Campaign: vk_booking_cancelled
 // {{1}} customer_name  {{2}} booking_id  {{3}} car_name
@@ -290,4 +337,5 @@ module.exports = {
   sendBookingCancelledToUser,
   sendPickupReminder,
   sendBookingInvoiceToUser,
+  sendClosingBillToUser,
 };

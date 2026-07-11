@@ -5,6 +5,8 @@ const Testimonial = require('../models/Testimonial');
 const Offer = require('../models/Offer');
 const Settings = require('../models/Settings');
 const PolicyPage = require('../models/PolicyPage');
+const Car = require('../models/Car');
+const { getLiveLocations, isConfigured, getAddress } = require('../services/gps');
 
 router.get('/settings', async (req, res) => {
   try {
@@ -44,6 +46,57 @@ router.get('/offers', async (req, res) => {
     return res.json({ success: true, data });
   } catch (e) {
     return res.status(500).json({ success: false, message: 'Failed' });
+  }
+});
+
+// GET /api/public/gps/live — live fleet positions for the public /display board.
+// Deliberately unauthenticated (this is a shareable "track my shuttle"-style
+// link) and deliberately thin: no device IDs, battery, ignition, or booking
+// customer info — just enough to plot the fleet, unlike the admin GPS feed.
+const PUBLIC_IDLE_THRESHOLD_MINUTES = 30;
+
+router.get('/gps/live', async (req, res) => {
+  try {
+    if (!isConfigured()) {
+      return res.json({ success: true, configured: false, data: [] });
+    }
+
+    const cars = await Car.find(
+      { gpsDeviceId: { $nin: [null, ''] } },
+      'name registrationNo gpsDeviceId'
+    ).lean();
+
+    if (cars.length === 0) {
+      return res.json({ success: true, configured: true, data: [] });
+    }
+
+    const liveMap = await getLiveLocations(cars.map((c) => c.gpsDeviceId));
+
+    const data = await Promise.all(cars.map(async (car) => {
+      const device = liveMap.get(car.gpsDeviceId);
+      const base = { carId: car._id, name: car.name, regNo: car.registrationNo };
+
+      if (!device) {
+        return { ...base, status: 'offline', speed: 0, lat: null, lng: null, lastUpdate: null, address: null };
+      }
+
+      const lastUpdateMs = new Date(device.lastStatusUpdate || device.fixTime).getTime();
+      const minutesSinceUpdate = (Date.now() - lastUpdateMs) / 60000;
+      const status = minutesSinceUpdate > PUBLIC_IDLE_THRESHOLD_MINUTES
+        ? 'offline'
+        : device.attributes?.motion ? 'online' : 'idle';
+
+      const lat = device.valid ? device.latitude : null;
+      const lng = device.valid ? device.longitude : null;
+      const address = device.address || (await getAddress(lat, lng));
+
+      return { ...base, status, speed: device.speed || 0, lat, lng, lastUpdate: device.lastStatusUpdate, address };
+    }));
+
+    return res.json({ success: true, configured: true, data });
+  } catch (error) {
+    console.error('public gps live error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to fetch GPS data' });
   }
 });
 

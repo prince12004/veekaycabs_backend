@@ -1,4 +1,5 @@
 const Booking = require('../models/Booking');
+const BookingMedia = require('../models/BookingMedia');
 const Car = require('../models/Car');
 const City = require('../models/City');
 const Coupon = require('../models/Coupon');
@@ -140,7 +141,15 @@ const createBooking = async (req, res) => {
       discount: fare.discountAmount,
       totalAmount: fare.totalAmount,
       tokenAmount: fare.tokenAmount,
-      balanceDue: fare.balanceDue,
+      // Nothing has been paid yet at creation (amountPaid defaults to 0), so
+      // the full amount is genuinely due — NOT totalAmount minus the token,
+      // which assumes a payment that hasn't happened. Storing the "assumed
+      // paid" figure here is what let balanceDue go stale for any booking
+      // whose token payment never completes (still shows as owing less than
+      // it actually does). balanceDue is recalculated from the real
+      // amountPaid wherever it changes after this (payment verify, webhook,
+      // status update).
+      balanceDue: fare.totalAmount,
       couponCode: couponCode ? couponCode.toUpperCase() : undefined,
       razorpayOrderId,
       status: 'pending',
@@ -213,6 +222,24 @@ const getBookingById = async (req, res) => {
   } catch (error) {
     console.error('getBookingById error:', error);
     return res.status(500).json({ success: false, message: 'Failed to fetch booking' });
+  }
+};
+
+// GET /api/bookings/:id/media — pickup/return/damage condition photos for the customer's own booking
+const getMyBookingMedia = async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id, 'userId');
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+
+    if (booking.userId.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
+    const media = await BookingMedia.find({ bookingId: req.params.id }).sort({ uploadedAt: 1 });
+    return res.json({ success: true, data: media });
+  } catch (error) {
+    console.error('getMyBookingMedia error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to fetch photos' });
   }
 };
 
@@ -347,4 +374,4 @@ const cancelBooking = async (req, res) => {
   }
 };
 
-module.exports = { createBooking, getMyBookings, getBookingById, extendBooking, cancelBooking };
+module.exports = { createBooking, getMyBookings, getBookingById, extendBooking, cancelBooking, getMyBookingMedia };

@@ -98,6 +98,7 @@ const verifyPayment = async (req, res) => {
 
     booking.razorpayPaymentId = razorpay_payment_id;
     booking.amountPaid = booking.tokenAmount;
+    booking.balanceDue = booking.totalAmount - booking.amountPaid;
     booking.status = 'confirmed';
     await booking.save();
 
@@ -155,6 +156,7 @@ const razorpayWebhook = async (req, res) => {
       if (booking && booking.status === 'pending') {
         booking.razorpayPaymentId = payment.id;
         booking.amountPaid = payment.amount / 100;
+        booking.balanceDue = booking.totalAmount - booking.amountPaid;
         booking.status = 'confirmed';
         await booking.save();
 

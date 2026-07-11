@@ -9,6 +9,9 @@ const {
   updateBooking,
   updateVehicleVerification,
   sendInvoiceWhatsApp,
+  closeBooking,
+  markRefundPaid,
+  sendClosingBillWhatsApp,
 } = require('../../controllers/admin/adminBookingsController');
 const {
   uploadBookingMedia,
@@ -31,6 +34,8 @@ router.post('/offline', createOfflineBooking);
 router.get('/:id', getBookingDetail);
 router.patch('/:id/status', updateBookingStatus);
 router.patch('/:id/verification', updateVehicleVerification);
+router.patch('/:id/close', closeBooking);
+router.patch('/:id/refund-paid', markRefundPaid);
 router.put('/:id', updateBooking);
 
 // Media (video/photo) upload — up to 5 files per call
@@ -52,5 +57,8 @@ router.post('/:id/send-car-docs', sendCarDocsWhatsApp);
 
 // Upload invoice PDF + send to customer via WhatsApp
 router.post('/:id/invoice/send-whatsapp', getUploader('booking-invoices').single('file'), sendInvoiceWhatsApp);
+
+// Upload closing/final-settlement bill PDF + send to customer via WhatsApp
+router.post('/:id/closing-bill/send-whatsapp', getUploader('booking-invoices').single('file'), sendClosingBillWhatsApp);
 
 module.exports = router;

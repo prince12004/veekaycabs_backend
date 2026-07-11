@@ -13,6 +13,7 @@ const CarSchema = new mongoose.Schema({
   securityDeposit: { type: Number, default: 10000 },
   doorstepDeliveryCharge: { type: Number, default: 500 },
   kmPackage: { type: String, default: '250 km/day' },
+  extraKmRate: { type: Number, default: 0 },
   images: [String],
   cityId: { type: mongoose.Schema.Types.ObjectId, ref: 'City', required: true },
   gpsDeviceId: { type: String },
