@@ -5,6 +5,7 @@ const Testimonial = require('../models/Testimonial');
 const Offer = require('../models/Offer');
 const Settings = require('../models/Settings');
 const PolicyPage = require('../models/PolicyPage');
+const CarSeoPage = require('../models/CarSeoPage');
 const Car = require('../models/Car');
 const { getLiveLocations, isConfigured, getAddress } = require('../services/gps');
 
@@ -97,6 +98,27 @@ router.get('/gps/live', async (req, res) => {
   } catch (error) {
     console.error('public gps live error:', error);
     return res.status(500).json({ success: false, message: 'Failed to fetch GPS data' });
+  }
+});
+
+// GET /api/public/car-seo-pages — lightweight list for the footer's "Popular
+// Searches" link menu (imported from the old site's tbl_pages).
+router.get('/car-seo-pages', async (req, res) => {
+  try {
+    const pages = await CarSeoPage.find({ isActive: true }, 'pageName pageSlug').sort({ pageName: 1 }).lean();
+    return res.json({ success: true, data: pages });
+  } catch (e) {
+    return res.status(500).json({ success: false, message: 'Failed' });
+  }
+});
+
+router.get('/car-seo-pages/:slug', async (req, res) => {
+  try {
+    const page = await CarSeoPage.findOne({ pageSlug: req.params.slug, isActive: true });
+    if (!page) return res.status(404).json({ success: false, message: 'Page not found' });
+    return res.json({ success: true, data: page });
+  } catch (e) {
+    return res.status(500).json({ success: false, message: 'Failed' });
   }
 });
 
