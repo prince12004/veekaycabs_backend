@@ -32,7 +32,12 @@ const sendOtpSms = async (mobile, otp) => {
 
     console.log('[SMS] API response:', resData);
 
-    const isSuccess = /^\d+$/.test(resData.trim());
+    // YourBulkSMS returns either a plain numeric message ID (legacy routes)
+    // or a JSON object like {"Status":"Success","Code":"000",...} (route=2).
+    const isSuccess = typeof response.data === 'object'
+      ? response.data.Status === 'Success' || response.data.Code === '000'
+      : /^\d+$/.test(resData);
+
     return isSuccess
       ? { success: true, data: resData }
       : { success: false, error: resData };

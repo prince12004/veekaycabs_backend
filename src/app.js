@@ -51,6 +51,10 @@ const publicRoutes = require('./routes/public');
 
 const app = express();
 
+// Trust the Nginx reverse proxy in front of this app so req.ip and the
+// X-Forwarded-For header are read correctly (required by express-rate-limit).
+app.set('trust proxy', 1);
+
 // Security, compression & logging
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression()); // gzip all responses — reduces bandwidth ~70%
