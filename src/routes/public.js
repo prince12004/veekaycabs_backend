@@ -6,6 +6,7 @@ const Offer = require('../models/Offer');
 const Settings = require('../models/Settings');
 const PolicyPage = require('../models/PolicyPage');
 const CarSeoPage = require('../models/CarSeoPage');
+const TempoSeoPage = require('../models/TempoSeoPage');
 const Car = require('../models/Car');
 const { getLiveLocations, isConfigured, getAddress } = require('../services/gps');
 
@@ -117,6 +118,17 @@ router.get('/car-seo-pages/:slug', async (req, res) => {
     const page = await CarSeoPage.findOne({ pageSlug: req.params.slug, isActive: true });
     if (!page) return res.status(404).json({ success: false, message: 'Page not found' });
     return res.json({ success: true, data: page });
+  } catch (e) {
+    return res.status(500).json({ success: false, message: 'Failed' });
+  }
+});
+
+// GET /api/public/tempo-seo-pages — lightweight list, used by sitemap.xml
+// generation (mirrors /car-seo-pages above).
+router.get('/tempo-seo-pages', async (req, res) => {
+  try {
+    const pages = await TempoSeoPage.find({ isActive: true }, 'pageName pageSlug').sort({ pageName: 1 }).lean();
+    return res.json({ success: true, data: pages });
   } catch (e) {
     return res.status(500).json({ success: false, message: 'Failed' });
   }
