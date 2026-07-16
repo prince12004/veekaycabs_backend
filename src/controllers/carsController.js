@@ -5,7 +5,7 @@ const City = require('../models/City');
 // GET /api/cars/available
 const getAvailableCars = async (req, res) => {
   try {
-    const { city, startTime, endTime, type, fuel, transmission, seats, page = 1, limit = 20 } = req.query;
+    const { city, startTime, endTime, type, fuel, transmission, seats, page, limit } = req.query;
 
     if (!city || !startTime || !endTime) {
       return res.status(400).json({
@@ -76,16 +76,25 @@ const getAvailableCars = async (req, res) => {
     // Available cars first, sold-out cars pushed to the end
     carsWithPricing.sort((a, b) => (a.isAvailable === b.isAvailable ? 0 : a.isAvailable ? -1 : 1));
 
-    // Pagination
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    const paginated = carsWithPricing.slice(skip, skip + parseInt(limit));
+    // Pagination is opt-in: only slice the results if a caller explicitly
+    // asks for a page/limit. The frontend search has no pagination UI and
+    // expects the full list, so it must not be silently capped.
+    let paginated = carsWithPricing;
+    let pageNum = 1;
+    let pageSize = carsWithPricing.length;
+    if (page || limit) {
+      pageNum = parseInt(page) || 1;
+      pageSize = parseInt(limit) || carsWithPricing.length;
+      const skip = (pageNum - 1) * pageSize;
+      paginated = carsWithPricing.slice(skip, skip + pageSize);
+    }
 
     return res.json({
       success: true,
       data: paginated,
       total: carsWithPricing.length,
-      page: parseInt(page),
-      pages: Math.ceil(carsWithPricing.length / parseInt(limit)),
+      page: pageNum,
+      pages: pageSize > 0 ? Math.ceil(carsWithPricing.length / pageSize) : 1,
     });
   } catch (error) {
     console.error('getAvailableCars error:', error);
