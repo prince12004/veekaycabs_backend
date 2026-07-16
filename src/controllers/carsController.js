@@ -106,6 +106,7 @@ const getAvailableCars = async (req, res) => {
 const getPopularCars = async (req, res) => {
   try {
     const { city, limit = 6, startTime, endTime } = req.query;
+    const wantedCount = parseInt(limit);
 
     let cityFilter = {};
     if (city) {
@@ -123,7 +124,7 @@ const getPopularCars = async (req, res) => {
       { $match: { status: { $in: ['confirmed', 'completed', 'active'] } } },
       { $group: { _id: '$carId', count: { $sum: 1 } } },
       { $sort: { count: -1 } },
-      { $limit: parseInt(limit) * 3 },
+      { $limit: wantedCount * 3 },
     ]);
 
     const orderedIds = popularCarIds.map((p) => p._id);
@@ -134,28 +135,26 @@ const getPopularCars = async (req, res) => {
       ...cityFilter,
     })
       .populate('cityId', 'name slug')
-      .limit(parseInt(limit));
+      .limit(wantedCount);
 
     // Sort by popularity order
     const sorted = orderedIds
       .map((id) => cars.find((c) => c._id.toString() === id.toString()))
       .filter(Boolean);
 
-    // If fewer than requested, fill with latest active cars
-    if (sorted.length < parseInt(limit)) {
-      const existing = sorted.map((c) => c._id.toString());
-      const extras = await Car.find({
-        _id: { $nin: existing },
-        isActive: true,
-        ...cityFilter,
-      })
-        .populate('cityId', 'name slug')
-        .limit(parseInt(limit) - sorted.length)
-        .sort({ createdAt: -1 });
-      sorted.push(...extras);
-    }
-
-    let result = sorted.slice(0, parseInt(limit));
+    // Pull in extra active cars up front — some of the "popular" ones may turn
+    // out to be booked for the requested window, so we need spares to backfill
+    // with so the homepage always shows a full row of *available* cars.
+    const existing = sorted.map((c) => c._id.toString());
+    const extras = await Car.find({
+      _id: { $nin: existing },
+      isActive: true,
+      ...cityFilter,
+    })
+      .populate('cityId', 'name slug')
+      .limit(wantedCount * 3)
+      .sort({ createdAt: -1 });
+    const pool = [...sorted, ...extras];
 
     // Availability check — a chosen date/time window if given, otherwise
     // "right now" so the homepage can flag cars that are currently out on rent.
@@ -165,7 +164,7 @@ const getPopularCars = async (req, res) => {
       start = new Date();
       end = new Date();
     }
-    const carIds = result.map((c) => c._id);
+    const carIds = pool.map((c) => c._id);
     const overlappingBookings = await Booking.find({
       carId: { $in: carIds },
       status: { $in: ['confirmed', 'active'] },
@@ -173,9 +172,16 @@ const getPopularCars = async (req, res) => {
     }).select('carId');
     const bookedCarIds = new Set(overlappingBookings.map((b) => b.carId.toString()));
 
-    result = result
-      .map((c) => ({ ...c.toObject(), isAvailable: !bookedCarIds.has(c._id.toString()) }))
-      .sort((a, b) => (a.isAvailable === b.isAvailable ? 0 : a.isAvailable ? -1 : 1));
+    // Keep popularity order, drop sold-out cars, and only fall back to
+    // showing an unavailable car if there simply aren't enough available ones.
+    const available = pool.filter((c) => !bookedCarIds.has(c._id.toString()));
+    const unavailable = pool.filter((c) => bookedCarIds.has(c._id.toString()));
+    const chosen = [...available, ...unavailable].slice(0, wantedCount);
+
+    const result = chosen.map((c) => ({
+      ...c.toObject(),
+      isAvailable: !bookedCarIds.has(c._id.toString()),
+    }));
 
     return res.json({ success: true, data: result });
   } catch (error) {
