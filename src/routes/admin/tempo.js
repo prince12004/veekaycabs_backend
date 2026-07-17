@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { protectAdmin } = require('../../middleware/adminAuth');
+const { protectAdmin, requirePermission } = require('../../middleware/adminAuth');
 const { getUploader } = require('../../middleware/upload');
 const {
   getAllTempos,
@@ -17,7 +17,7 @@ router.get('/', getAllTempos);
 router.get('/:id', getTempoById);
 router.post('/', getUploader('tempos').array('images', 10), createTempo);
 router.put('/:id', getUploader('tempos').array('images', 10), updateTempo);
-router.delete('/:id', deleteTempo);
+router.delete('/:id', requirePermission('tempoAdmin', 'delete'), deleteTempo);
 router.patch('/:id/toggle', toggleTempoStatus);
 
 module.exports = router;

@@ -7,6 +7,7 @@ const {
   exportBookings,
   updateBookingStatus,
   updateBooking,
+  deleteBooking,
   updateVehicleVerification,
   sendInvoiceWhatsApp,
   closeBooking,
@@ -22,7 +23,7 @@ const {
   getBookingUserDocs,
   sendCarDocsWhatsApp,
 } = require('../../controllers/admin/adminBookingMediaController');
-const { protectAdmin } = require('../../middleware/adminAuth');
+const { protectAdmin, requirePermission } = require('../../middleware/adminAuth');
 const { getUploader } = require('../../middleware/upload');
 
 router.use(protectAdmin);
@@ -37,6 +38,7 @@ router.patch('/:id/verification', updateVehicleVerification);
 router.patch('/:id/close', closeBooking);
 router.patch('/:id/refund-paid', markRefundPaid);
 router.put('/:id', updateBooking);
+router.delete('/:id', requirePermission('bookings', 'delete'), deleteBooking);
 
 // Media (video/photo) upload — up to 5 files per call
 router.post('/:id/media', getUploader('booking-media').array('files', 5), uploadBookingMedia);

@@ -6,6 +6,7 @@ const getAllCities = async (req, res) => {
   try {
     const cities = await City.find({}).sort({ name: 1 }).lean();
     const counts = await Car.aggregate([
+      { $match: { isDeleted: { $ne: true } } },
       { $group: { _id: '$cityId', count: { $sum: 1 } } },
     ]);
     const countByCity = Object.fromEntries(counts.map((c) => [String(c._id), c.count]));

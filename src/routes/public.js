@@ -64,7 +64,7 @@ router.get('/gps/live', async (req, res) => {
     }
 
     const cars = await Car.find(
-      { gpsDeviceId: { $nin: [null, ''] } },
+      { gpsDeviceId: { $nin: [null, ''] }, isDeleted: { $ne: true } },
       'name registrationNo gpsDeviceId'
     ).lean();
 

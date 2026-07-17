@@ -16,6 +16,7 @@ const CarSeoPageSchema = new mongoose.Schema({
   robots: { type: String, default: 'index, follow' },
   parent: { type: String },
   isActive: { type: Boolean, default: true },
+  isDeleted: { type: Boolean, default: false }, // soft-delete
 }, { timestamps: true });
 
 module.exports = mongoose.model('CarSeoPage', CarSeoPageSchema);

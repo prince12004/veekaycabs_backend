@@ -59,4 +59,13 @@ const superAdminOnly = (req, res, next) => {
   next();
 };
 
-module.exports = { protectAdmin, superAdminOnly, generateAdminTokens };
+// Middleware factory: super_admin always passes; any other admin needs the
+// matching "<section>_<op>" flag explicitly granted via Manage Admins
+// (e.g. requirePermission('fleet', 'delete') needs permissions.fleet_delete).
+const requirePermission = (section, op) => (req, res, next) => {
+  if (req.admin?.role === 'super_admin') return next();
+  if (req.admin?.permissions?.[`${section}_${op}`] === true) return next();
+  return res.status(403).json({ success: false, message: `You don't have permission to ${op} ${section}` });
+};
+
+module.exports = { protectAdmin, superAdminOnly, requirePermission, generateAdminTokens };

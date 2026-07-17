@@ -18,6 +18,7 @@ const CarSchema = new mongoose.Schema({
   cityId: { type: mongoose.Schema.Types.ObjectId, ref: 'City', required: true },
   gpsDeviceId: { type: String },
   isActive: { type: Boolean, default: true },
+  isDeleted: { type: Boolean, default: false }, // soft-delete — distinct from isActive, which Deactivate/the cron also toggle
   // Set whenever an admin deactivates the car — the date range it's meant to
   // stay off the fleet for, and why. Cleared on reactivation.
   inactivePeriod: {

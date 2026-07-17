@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { getAllUsers, getUserDetail, toggleBlockUser, updateUser, exportUsers } = require('../../controllers/admin/adminUsersController');
-const { protectAdmin } = require('../../middleware/adminAuth');
+const { getAllUsers, getUserDetail, toggleBlockUser, updateUser, deleteUser, exportUsers } = require('../../controllers/admin/adminUsersController');
+const { protectAdmin, requirePermission } = require('../../middleware/adminAuth');
 
 router.use(protectAdmin);
 
@@ -10,5 +10,6 @@ router.get('/', getAllUsers);
 router.get('/:id', getUserDetail);
 router.patch('/:id/block', toggleBlockUser);
 router.put('/:id', updateUser);
+router.delete('/:id', requirePermission('users', 'delete'), deleteUser);
 
 module.exports = router;

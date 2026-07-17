@@ -10,6 +10,7 @@ const UserSchema = new mongoose.Schema({
   googleId: { type: String },
   isVerified: { type: Boolean, default: false },
   isBlocked: { type: Boolean, default: false },
+  isDeleted: { type: Boolean, default: false }, // soft-delete — admin "Delete" hides, never wipes real customer/booking history
   role: { type: String, enum: ['user', 'admin'], default: 'user' },
   kycStatus: {
     type: String,
@@ -24,6 +25,7 @@ const UserSchema = new mongoose.Schema({
 UserSchema.index({ email: 1 });
 UserSchema.index({ kycStatus: 1 });          // admin KYC filter
 UserSchema.index({ isBlocked: 1 });          // admin blocked-users filter
+UserSchema.index({ isDeleted: 1 });          // admin soft-delete filter
 UserSchema.index({ createdAt: -1 });         // admin user listing
 
 module.exports = mongoose.model('User', UserSchema);

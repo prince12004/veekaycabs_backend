@@ -69,6 +69,7 @@ const createBooking = async (req, res) => {
     const conflict = await Booking.findOne({
       carId,
       status: { $in: ['confirmed', 'active'] },
+      isDeleted: { $ne: true },
       $or: [{ startTime: { $lt: end }, endTime: { $gt: start } }],
     });
     if (conflict) {
@@ -174,7 +175,7 @@ const createBooking = async (req, res) => {
 const getMyBookings = async (req, res) => {
   try {
     const { status, page = 1, limit = 10 } = req.query;
-    const filter = { userId: req.user._id };
+    const filter = { userId: req.user._id, isDeleted: { $ne: true } };
     if (status) filter.status = status;
 
     const total = await Booking.countDocuments(filter);
@@ -271,6 +272,7 @@ const extendBooking = async (req, res) => {
       carId: booking.carId._id,
       _id: { $ne: booking._id },
       status: { $in: ['confirmed', 'active'] },
+      isDeleted: { $ne: true },
       $or: [{ startTime: { $lt: newEnd }, endTime: { $gt: booking.endTime } }],
     });
     if (conflict) {

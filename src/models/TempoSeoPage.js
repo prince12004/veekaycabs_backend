@@ -12,6 +12,7 @@ const TempoSeoPageSchema = new mongoose.Schema({
   sortContent: { type: String },
   content: { type: String },
   isActive: { type: Boolean, default: true },
+  isDeleted: { type: Boolean, default: false }, // soft-delete
 }, { timestamps: true });
 
 module.exports = mongoose.model('TempoSeoPage', TempoSeoPageSchema);

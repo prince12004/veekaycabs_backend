@@ -48,22 +48,22 @@ const getDashboardStats = async (req, res) => {
       pendingRefunds,
     ] = await Promise.all([
       Booking.aggregate([
-        { $match: { status: 'confirmed', createdAt: { $gte: todayStart, $lte: todayEnd } } },
+        { $match: { status: 'confirmed', isDeleted: { $ne: true }, createdAt: { $gte: todayStart, $lte: todayEnd } } },
         { $group: { _id: null, total: { $sum: '$amountPaid' } } },
       ]),
       Booking.aggregate([
-        { $match: { status: 'confirmed', createdAt: { $gte: yesterdayStart, $lte: yesterdayEnd } } },
+        { $match: { status: 'confirmed', isDeleted: { $ne: true }, createdAt: { $gte: yesterdayStart, $lte: yesterdayEnd } } },
         { $group: { _id: null, total: { $sum: '$amountPaid' } } },
       ]),
-      Booking.countDocuments({ status: 'active' }),
+      Booking.countDocuments({ status: 'active', isDeleted: { $ne: true } }),
       User.countDocuments({ createdAt: { $gte: todayStart, $lte: todayEnd }, role: 'user' }),
       User.countDocuments({ createdAt: { $gte: yesterdayStart, $lte: yesterdayEnd }, role: 'user' }),
       User.countDocuments({ kycStatus: 'pending' }),
-      Car.countDocuments({}),
+      Car.countDocuments({ isDeleted: { $ne: true } }),
       Car.countDocuments({ isActive: true }),
-      Booking.countDocuments({ status: { $in: ['confirmed', 'active', 'completed'] } }),
-      Booking.countDocuments({ status: 'completed' }),
-      Booking.find()
+      Booking.countDocuments({ status: { $in: ['confirmed', 'active', 'completed'] }, isDeleted: { $ne: true } }),
+      Booking.countDocuments({ status: 'completed', isDeleted: { $ne: true } }),
+      Booking.find({ isDeleted: { $ne: true } })
         .sort({ createdAt: -1 })
         .limit(5)
         .populate('userId', 'name')
@@ -76,6 +76,7 @@ const getDashboardStats = async (req, res) => {
           $match: {
             createdAt: { $gte: sevenDaysAgo, $lte: todayEnd },
             status: { $in: ['confirmed', 'active', 'completed'] },
+            isDeleted: { $ne: true },
           },
         },
         {
@@ -91,6 +92,7 @@ const getDashboardStats = async (req, res) => {
           $match: {
             createdAt: { $gte: prevWeekStart, $lte: prevWeekEnd },
             status: { $in: ['confirmed', 'active', 'completed'] },
+            isDeleted: { $ne: true },
           },
         },
         { $group: { _id: null, total: { $sum: '$amountPaid' } } },
@@ -235,6 +237,7 @@ const getDashboardInsights = async (req, res) => {
           $match: {
             createdAt: { $gte: fromDate, $lte: toDate },
             status: { $in: ['confirmed', 'active', 'completed'] },
+            isDeleted: { $ne: true },
           },
         },
         {
@@ -251,6 +254,7 @@ const getDashboardInsights = async (req, res) => {
           $match: {
             createdAt: { $gte: fromDate, $lte: toDate },
             status: { $in: ['confirmed', 'active', 'completed'] },
+            isDeleted: { $ne: true },
           },
         },
         { $group: { _id: '$cityId', bookings: { $sum: 1 }, revenue: { $sum: '$totalAmount' } } },
@@ -287,10 +291,10 @@ const getSidebarCounts = async (req, res) => {
       newContacts,
       totalCars,
     ] = await Promise.all([
-      Booking.countDocuments({ status: 'confirmed' }),
+      Booking.countDocuments({ status: 'confirmed', isDeleted: { $ne: true } }),
       User.countDocuments({ kycStatus: 'pending' }),
       ContactRequest.countDocuments({ status: 'new' }),
-      Car.countDocuments({}),
+      Car.countDocuments({ isDeleted: { $ne: true } }),
     ]);
 
     return res.json({

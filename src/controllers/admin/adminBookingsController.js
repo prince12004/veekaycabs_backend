@@ -15,7 +15,7 @@ const generateBookingId = () => {
 const getAllBookings = async (req, res) => {
   try {
     const { status, city, from, to, page = 1, limit = 20, search, isOffline } = req.query;
-    const filter = {};
+    const filter = { isDeleted: { $ne: true } };
 
     if (status) filter.status = status;
     if (city) filter.cityId = city;
@@ -73,6 +73,20 @@ const getBookingDetail = async (req, res) => {
   }
 };
 
+// DELETE /api/admin/bookings/:id — soft delete: hides it from every list
+// (admin + customer "My Bookings") and frees its dates for new bookings,
+// but the row and its financial history are never actually removed.
+const deleteBooking = async (req, res) => {
+  try {
+    const booking = await Booking.findByIdAndUpdate(req.params.id, { isDeleted: true }, { new: true });
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+    return res.json({ success: true, message: 'Booking deleted successfully' });
+  } catch (error) {
+    console.error('admin deleteBooking error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to delete booking' });
+  }
+};
+
 // POST /api/admin/bookings/offline
 const createOfflineBooking = async (req, res) => {
   try {
@@ -101,6 +115,7 @@ const createOfflineBooking = async (req, res) => {
     const conflict = await Booking.findOne({
       carId,
       status: { $in: ['confirmed', 'active'] },
+      isDeleted: { $ne: true },
       $or: [{ startTime: { $lt: end }, endTime: { $gt: start } }],
     });
     if (conflict) {
@@ -196,7 +211,7 @@ const createOfflineBooking = async (req, res) => {
 const exportBookings = async (req, res) => {
   try {
     const { from, to, status } = req.query;
-    const filter = {};
+    const filter = { isDeleted: { $ne: true } };
     if (status) filter.status = status;
     if (from || to) {
       filter.createdAt = {};
@@ -550,4 +565,4 @@ const sendInvoiceWhatsApp = async (req, res) => {
   }
 };
 
-module.exports = { getAllBookings, getBookingDetail, createOfflineBooking, exportBookings, updateBookingStatus, updateBooking, updateVehicleVerification, sendInvoiceWhatsApp, closeBooking, markRefundPaid, sendClosingBillWhatsApp };
+module.exports = { getAllBookings, getBookingDetail, createOfflineBooking, exportBookings, updateBookingStatus, updateBooking, deleteBooking, updateVehicleVerification, sendInvoiceWhatsApp, closeBooking, markRefundPaid, sendClosingBillWhatsApp };

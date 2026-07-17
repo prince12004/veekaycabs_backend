@@ -5,7 +5,7 @@ const User = require('../../models/User');
 exports.getAllTempoBookings = async (req, res) => {
   try {
     const { status, page = 1, limit = 20 } = req.query;
-    const filter = {};
+    const filter = { isDeleted: { $ne: true } };
     if (status) filter.status = status;
 
     const [bookings, total] = await Promise.all([
@@ -72,9 +72,11 @@ exports.updateTempoBooking = async (req, res) => {
   }
 };
 
+// Soft delete: hides it from lists, never wipes the row
 exports.deleteTempoBooking = async (req, res) => {
   try {
-    await TempoBooking.findByIdAndDelete(req.params.id);
+    const booking = await TempoBooking.findByIdAndUpdate(req.params.id, { isDeleted: true }, { new: true });
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
     res.json({ success: true, message: 'Booking deleted' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

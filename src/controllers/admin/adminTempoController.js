@@ -3,7 +3,7 @@ const { getFileUrl } = require('../../middleware/upload');
 
 exports.getAllTempos = async (req, res) => {
   try {
-    const tempos = await TempoTraveller.find().sort({ showOnTop: -1, createdAt: -1 });
+    const tempos = await TempoTraveller.find({ isDeleted: { $ne: true } }).sort({ showOnTop: -1, createdAt: -1 });
     res.json({ success: true, data: tempos });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -51,9 +51,12 @@ exports.updateTempo = async (req, res) => {
   }
 };
 
+// Soft delete: hides it from the admin list and public site. Distinct from
+// the Show/Hide toggle (isActive alone) so un-hiding can never resurface a
+// deleted vehicle.
 exports.deleteTempo = async (req, res) => {
   try {
-    const tempo = await TempoTraveller.findByIdAndDelete(req.params.id);
+    const tempo = await TempoTraveller.findByIdAndUpdate(req.params.id, { isActive: false, isDeleted: true }, { new: true });
     if (!tempo) return res.status(404).json({ success: false, message: 'Tempo not found' });
     res.json({ success: true, message: 'Tempo deleted successfully' });
   } catch (err) {

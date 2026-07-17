@@ -81,6 +81,16 @@ const verifyOtp = async (req, res) => {
     let user = await User.findOne({ mobile });
     const isNewUser = !user;
 
+    // Reject at login (not just via middleware on the next request) so the
+    // failure is clear instead of an OTP that "succeeds" but leaves every
+    // subsequent API call silently 403ing.
+    if (user?.isDeleted) {
+      return res.status(403).json({ success: false, message: 'This account has been removed. Please contact support.' });
+    }
+    if (user?.isBlocked) {
+      return res.status(403).json({ success: false, message: 'Your account has been blocked. Please contact support.' });
+    }
+
     if (!user) {
       user = await User.create({
         mobile,

@@ -51,7 +51,7 @@ exports.createTempoBooking = async (req, res) => {
 
 exports.getMyTempoBookings = async (req, res) => {
   try {
-    const bookings = await TempoBooking.find({ userId: req.user._id })
+    const bookings = await TempoBooking.find({ userId: req.user._id, isDeleted: { $ne: true } })
       .populate('tempoId', 'name registrationNo seats images location')
       .sort({ createdAt: -1 });
     res.json({ success: true, data: bookings });

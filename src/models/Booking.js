@@ -38,6 +38,7 @@ const BookingSchema = new mongoose.Schema({
   pickupReminderSent: { type: Boolean, default: false },
   billUrl: { type: String },
   isOffline: { type: Boolean, default: false },
+  isDeleted: { type: Boolean, default: false }, // soft-delete — admin "Delete" hides from lists, never wipes the record
   odometerStart: { type: Number },
   odometerEnd: { type: Number },
   extraKmCharge: { type: Number, default: 0 },

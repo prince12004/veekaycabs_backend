@@ -15,7 +15,7 @@ const startServer = async () => {
     try {
       const Booking = require('./models/Booking');
       const result = await Booking.updateMany(
-        { status: 'active', endTime: { $lt: new Date() } },
+        { status: 'active', endTime: { $lt: new Date() }, isDeleted: { $ne: true } },
         { status: 'completed' }
       );
       if (result.modifiedCount > 0) {
@@ -32,7 +32,7 @@ const startServer = async () => {
       const Booking = require('./models/Booking');
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
       const result = await Booking.updateMany(
-        { status: 'pending', createdAt: { $lt: oneHourAgo } },
+        { status: 'pending', createdAt: { $lt: oneHourAgo }, isDeleted: { $ne: true } },
         { status: 'cancelled', cancellationReason: 'Payment not received' }
       );
       if (result.modifiedCount > 0) {
@@ -51,11 +51,11 @@ const startServer = async () => {
       const now = new Date();
 
       const wentInactive = await Car.updateMany(
-        { isActive: true, 'inactivePeriod.from': { $lte: now } },
+        { isActive: true, isDeleted: { $ne: true }, 'inactivePeriod.from': { $lte: now } },
         { $set: { isActive: false } }
       );
       const wentActive = await Car.updateMany(
-        { isActive: false, 'inactivePeriod.to': { $lt: now } },
+        { isActive: false, isDeleted: { $ne: true }, 'inactivePeriod.to': { $lt: now } },
         { $set: { isActive: true }, $unset: { inactivePeriod: 1 } }
       );
 
@@ -77,6 +77,7 @@ const startServer = async () => {
       const dueBookings = await Booking.find({
         status: 'confirmed',
         pickupReminderSent: false,
+        isDeleted: { $ne: true },
         startTime: { $gte: now, $lte: windowEnd },
       })
         .populate('userId', 'name mobile')

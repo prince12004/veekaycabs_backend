@@ -6,7 +6,7 @@ const Booking = require('../../models/Booking');
 const getAllUsers = async (req, res) => {
   try {
     const { kycStatus, isBlocked, search, page = 1, limit = 20 } = req.query;
-    const filter = { role: 'user' };
+    const filter = { role: 'user', isDeleted: { $ne: true } };
 
     if (kycStatus) filter.kycStatus = kycStatus;
     if (isBlocked !== undefined) filter.isBlocked = isBlocked === 'true';
@@ -48,7 +48,7 @@ const getUserDetail = async (req, res) => {
 
     const [docs, bookings] = await Promise.all([
       UserDocument.findOne({ userId: user._id }),
-      Booking.find({ userId: user._id })
+      Booking.find({ userId: user._id, isDeleted: { $ne: true } })
         .populate('carId', 'name registrationNo')
         .sort({ createdAt: -1 })
         .limit(10),
@@ -123,10 +123,27 @@ const updateUser = async (req, res) => {
   }
 };
 
+// DELETE /api/admin/users/:id — soft delete: hides from admin lists, blocks
+// login, never wipes the account or its booking/KYC history
+const deleteUser = async (req, res) => {
+  try {
+    const existing = await User.findById(req.params.id, 'role');
+    if (!existing) return res.status(404).json({ success: false, message: 'User not found' });
+    if (existing.role === 'admin') {
+      return res.status(403).json({ success: false, message: 'Cannot delete admin accounts' });
+    }
+    await User.findByIdAndUpdate(req.params.id, { isDeleted: true, isBlocked: true });
+    return res.json({ success: true, message: 'User deleted successfully' });
+  } catch (error) {
+    console.error('admin deleteUser error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to delete user' });
+  }
+};
+
 // GET /api/admin/users/export
 const exportUsers = async (req, res) => {
   try {
-    const users = await User.find({ role: 'user' })
+    const users = await User.find({ role: 'user', isDeleted: { $ne: true } })
       .select('-refreshToken')
       .sort({ createdAt: -1 })
       .limit(10000);
@@ -156,4 +173,4 @@ const exportUsers = async (req, res) => {
   }
 };
 
-module.exports = { getAllUsers, getUserDetail, toggleBlockUser, updateUser, exportUsers };
+module.exports = { getAllUsers, getUserDetail, toggleBlockUser, updateUser, deleteUser, exportUsers };

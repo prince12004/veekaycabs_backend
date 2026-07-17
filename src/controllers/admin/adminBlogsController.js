@@ -5,7 +5,7 @@ const { getFileUrl } = require('../../middleware/upload');
 const getAllBlogs = async (req, res) => {
   try {
     const { isPublished, page = 1, limit = 20 } = req.query;
-    const filter = {};
+    const filter = { isDeleted: { $ne: true } };
     if (isPublished !== undefined) filter.isPublished = isPublished === 'true';
 
     const [total, blogs] = await Promise.all([
@@ -97,10 +97,10 @@ const updateBlog = async (req, res) => {
   }
 };
 
-// DELETE /api/admin/blogs/:id
+// DELETE /api/admin/blogs/:id — soft delete: hides it everywhere, never wipes the row
 const deleteBlog = async (req, res) => {
   try {
-    const blog = await Blog.findByIdAndDelete(req.params.id);
+    const blog = await Blog.findByIdAndUpdate(req.params.id, { isDeleted: true }, { new: true });
     if (!blog) return res.status(404).json({ success: false, message: 'Blog not found' });
     return res.json({ success: true, message: 'Blog deleted successfully' });
   } catch (error) {

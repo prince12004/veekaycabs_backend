@@ -12,16 +12,12 @@ const AdminSchema = new mongoose.Schema(
       default: 'admin',
     },
 
-    permissions: {
-      dashboard:  { type: Boolean, default: true  },
-      fleet:      { type: Boolean, default: true  },
-      bookings:   { type: Boolean, default: true  },
-      users:      { type: Boolean, default: true  },
-      finance:    { type: Boolean, default: false },
-      settings:   { type: Boolean, default: false },
-      tempoAdmin: { type: Boolean, default: false },
-      content:    { type: Boolean, default: true  },
-    },
+    // Flat map of section + section_op keys (e.g. "fleet", "fleet_delete",
+    // "content_delete") set by the Manage Admins UI. Mixed (not a fixed
+    // sub-schema) so every granular op the UI sends actually persists —
+    // a strict sub-schema here previously silently dropped anything beyond
+    // the 8 section-level booleans.
+    permissions: { type: mongoose.Schema.Types.Mixed, default: {} },
 
     isActive:     { type: Boolean, default: true },
     refreshToken: { type: String, select: false },

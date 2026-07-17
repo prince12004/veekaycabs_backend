@@ -17,7 +17,7 @@ const expiryAlertCondition = () => ({
 const getAllCars = async (req, res) => {
   try {
     const { city, type, isActive, search, expiryAlert, fields, page = 1, limit = 20 } = req.query;
-    const conditions = [];
+    const conditions = [{ isDeleted: { $ne: true } }];
     if (city) conditions.push({ cityId: city });
     if (type) conditions.push({ type });
     if (isActive !== undefined) conditions.push({ isActive: isActive === 'true' });
@@ -75,10 +75,10 @@ const getAllCars = async (req, res) => {
 const getCarStats = async (req, res) => {
   try {
     const [total, activeCount, cities, criticalExpiry] = await Promise.all([
-      Car.countDocuments({}),
+      Car.countDocuments({ isDeleted: { $ne: true } }),
       Car.countDocuments({ isActive: true }),
       Car.aggregate([
-        { $match: { cityId: { $ne: null } } },
+        { $match: { cityId: { $ne: null }, isDeleted: { $ne: true } } },
         { $group: { _id: '$cityId' } },
         { $lookup: { from: 'cities', localField: '_id', foreignField: '_id', as: 'city' } },
         { $unwind: '$city' },
@@ -200,16 +200,19 @@ const updateCar = async (req, res) => {
   }
 };
 
-// DELETE /api/admin/cars/:id  (soft delete)
+// DELETE /api/admin/cars/:id — soft delete: hides it from the admin list and
+// public site. Distinct from Deactivate (isActive alone), and clears any
+// scheduled inactivePeriod so the every-minute cron can't flip isActive back
+// on and inadvertently resurface a deleted car.
 const deleteCar = async (req, res) => {
   try {
     const car = await Car.findByIdAndUpdate(
       req.params.id,
-      { isActive: false },
+      { $set: { isActive: false, isDeleted: true }, $unset: { inactivePeriod: 1 } },
       { new: true }
     );
     if (!car) return res.status(404).json({ success: false, message: 'Car not found' });
-    return res.json({ success: true, message: 'Car deactivated successfully' });
+    return res.json({ success: true, message: 'Car deleted successfully' });
   } catch (error) {
     console.error('admin deleteCar error:', error);
     return res.status(500).json({ success: false, message: 'Failed to delete car' });

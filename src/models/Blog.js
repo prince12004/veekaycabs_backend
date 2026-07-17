@@ -16,6 +16,7 @@ const BlogSchema = new mongoose.Schema({
   seoTitle: String,
   seoDescription: String,
   seoKeywords: String,
+  isDeleted: { type: Boolean, default: false }, // soft-delete
 }, { timestamps: true });
 
 BlogSchema.index({ isPublished: 1, publishedAt: -1 });

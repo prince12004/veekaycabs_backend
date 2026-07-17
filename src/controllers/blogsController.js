@@ -4,7 +4,7 @@ const Blog = require('../models/Blog');
 const getBlogs = async (req, res) => {
   try {
     const { page = 1, limit = 10, tag } = req.query;
-    const filter = { isPublished: true };
+    const filter = { isPublished: true, isDeleted: { $ne: true } };
     if (tag) filter.tags = tag;
 
     const total = await Blog.countDocuments(filter);
@@ -31,7 +31,7 @@ const getBlogs = async (req, res) => {
 const getBlogBySlug = async (req, res) => {
   try {
     const blog = await Blog.findOneAndUpdate(
-      { slug: req.params.slug, isPublished: true },
+      { slug: req.params.slug, isPublished: true, isDeleted: { $ne: true } },
       { $inc: { views: 1 } },
       { new: true }
     );

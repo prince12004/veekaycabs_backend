@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { protectAdmin } = require('../../middleware/adminAuth');
+const { protectAdmin, requirePermission } = require('../../middleware/adminAuth');
 const {
   getAllTempoBookings,
   getTempoBookingById,
@@ -16,7 +16,7 @@ router.get('/', getAllTempoBookings);
 router.get('/:id', getTempoBookingById);
 router.post('/offline', createOfflineTempoBooking);
 router.put('/:id', updateTempoBooking);
-router.delete('/:id', deleteTempoBooking);
+router.delete('/:id', requirePermission('tempoAdmin', 'delete'), deleteTempoBooking);
 router.patch('/:id/car-received', markCarReceived);
 
 module.exports = router;

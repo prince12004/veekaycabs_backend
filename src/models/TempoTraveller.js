@@ -18,6 +18,7 @@ const TempoTravellerSchema = new mongoose.Schema({
   shortDescription: { type: String },
   images: [String],
   isActive: { type: Boolean, default: true },
+  isDeleted: { type: Boolean, default: false }, // soft-delete — distinct from isActive, which "Hide" also toggles
   showOnTop: { type: Boolean, default: false },
   slug: { type: String, unique: true },
   features: [String],

@@ -53,7 +53,7 @@ const verifyPayment = async (req, res) => {
     // ── Tempo Booking payment ─────────────────────────────────────────────────
     if (type === 'tempo') {
       const tempoBooking = await TempoBooking.findById(bookingId).populate('userId').populate('tempoId');
-      if (!tempoBooking) {
+      if (!tempoBooking || tempoBooking.isDeleted) {
         return res.status(404).json({ success: false, message: 'Tempo booking not found' });
       }
       tempoBooking.razorpayPaymentId = razorpay_payment_id;
@@ -92,7 +92,7 @@ const verifyPayment = async (req, res) => {
       booking = await Booking.findOne({ razorpayOrderId: razorpay_order_id }).populate('carId').populate('userId');
     }
 
-    if (!booking) {
+    if (!booking || booking.isDeleted) {
       return res.status(404).json({ success: false, message: 'Booking not found' });
     }
 
@@ -153,7 +153,7 @@ const razorpayWebhook = async (req, res) => {
       const orderId = payment.order_id;
 
       const booking = await Booking.findOne({ razorpayOrderId: orderId }).populate('carId').populate('userId');
-      if (booking && booking.status === 'pending') {
+      if (booking && !booking.isDeleted && booking.status === 'pending') {
         booking.razorpayPaymentId = payment.id;
         booking.amountPaid = payment.amount / 100;
         booking.balanceDue = booking.totalAmount - booking.amountPaid;

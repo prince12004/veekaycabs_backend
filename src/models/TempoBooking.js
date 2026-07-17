@@ -37,6 +37,7 @@ const TempoBookingSchema = new mongoose.Schema({
   cancelledAt: { type: Date },
   refundAmount: { type: Number, default: 0 },
   notes: { type: String },
+  isDeleted: { type: Boolean, default: false }, // soft-delete — admin "Delete" hides from lists, never wipes the record
 }, { timestamps: true });
 
 TempoBookingSchema.pre('save', async function (next) {

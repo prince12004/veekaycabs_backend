@@ -2,7 +2,7 @@ const CarSeoPage = require('../../models/CarSeoPage');
 
 exports.getAllSeoPages = async (req, res) => {
   try {
-    const pages = await CarSeoPage.find().sort({ createdAt: -1 });
+    const pages = await CarSeoPage.find({ isDeleted: { $ne: true } }).sort({ createdAt: -1 });
     res.json({ success: true, data: pages });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -42,9 +42,12 @@ exports.updateSeoPage = async (req, res) => {
   }
 };
 
+// Soft delete: also flips isActive off so it disappears from public routes
+// (which key off isActive), without ever wiping the row.
 exports.deleteSeoPage = async (req, res) => {
   try {
-    await CarSeoPage.findByIdAndDelete(req.params.id);
+    const page = await CarSeoPage.findByIdAndUpdate(req.params.id, { isActive: false, isDeleted: true }, { new: true });
+    if (!page) return res.status(404).json({ success: false, message: 'Page not found' });
     res.json({ success: true, message: 'Page deleted' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

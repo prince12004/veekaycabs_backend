@@ -16,6 +16,7 @@ const getRevenueReport = async (req, res) => {
           $match: {
             createdAt: { $gte: fromDate, $lte: toDate },
             status: { $in: ['confirmed', 'active', 'completed'] },
+            isDeleted: { $ne: true },
           },
         },
         {
@@ -34,6 +35,7 @@ const getRevenueReport = async (req, res) => {
           $match: {
             createdAt: { $gte: fromDate, $lte: toDate },
             status: { $in: ['confirmed', 'active', 'completed'] },
+            isDeleted: { $ne: true },
           },
         },
         {
@@ -53,6 +55,7 @@ const getRevenueReport = async (req, res) => {
           $match: {
             createdAt: { $gte: fromDate, $lte: toDate },
             status: { $in: ['confirmed', 'active', 'completed'] },
+            isDeleted: { $ne: true },
           },
         },
         {
@@ -90,7 +93,7 @@ const getBookingStats = async (req, res) => {
 
     const [statusBreakdown, paymentModeBreakdown, topCars, cancellationRate] = await Promise.all([
       Booking.aggregate([
-        { $match: { createdAt: { $gte: fromDate, $lte: toDate } } },
+        { $match: { createdAt: { $gte: fromDate, $lte: toDate }, isDeleted: { $ne: true } } },
         { $group: { _id: '$status', count: { $sum: 1 } } },
       ]),
       Booking.aggregate([
@@ -98,6 +101,7 @@ const getBookingStats = async (req, res) => {
           $match: {
             createdAt: { $gte: fromDate, $lte: toDate },
             status: { $in: ['confirmed', 'active', 'completed'] },
+            isDeleted: { $ne: true },
           },
         },
         { $group: { _id: '$paymentMode', count: { $sum: 1 }, revenue: { $sum: '$totalAmount' } } },
@@ -107,6 +111,7 @@ const getBookingStats = async (req, res) => {
           $match: {
             createdAt: { $gte: fromDate, $lte: toDate },
             status: { $in: ['confirmed', 'active', 'completed'] },
+            isDeleted: { $ne: true },
           },
         },
         { $group: { _id: '$carId', bookings: { $sum: 1 }, revenue: { $sum: '$totalAmount' } } },
@@ -117,7 +122,7 @@ const getBookingStats = async (req, res) => {
         { $project: { carName: '$car.name', registrationNo: '$car.registrationNo', bookings: 1, revenue: 1 } },
       ]),
       Booking.aggregate([
-        { $match: { createdAt: { $gte: fromDate, $lte: toDate } } },
+        { $match: { createdAt: { $gte: fromDate, $lte: toDate }, isDeleted: { $ne: true } } },
         {
           $group: {
             _id: null,

@@ -46,6 +46,7 @@ const getAvailableCars = async (req, res) => {
     const overlappingBookings = await Booking.find({
       carId: { $in: carIds },
       status: { $in: ['confirmed', 'active'] },
+      isDeleted: { $ne: true },
       $or: [{ startTime: { $lt: end }, endTime: { $gt: start } }],
     }).select('carId');
 
@@ -121,7 +122,7 @@ const getPopularCars = async (req, res) => {
 
     // Aggregate bookings to find most booked cars
     const popularCarIds = await Booking.aggregate([
-      { $match: { status: { $in: ['confirmed', 'completed', 'active'] } } },
+      { $match: { status: { $in: ['confirmed', 'completed', 'active'] }, isDeleted: { $ne: true } } },
       { $group: { _id: '$carId', count: { $sum: 1 } } },
       { $sort: { count: -1 } },
       { $limit: wantedCount * 3 },
@@ -168,6 +169,7 @@ const getPopularCars = async (req, res) => {
     const overlappingBookings = await Booking.find({
       carId: { $in: carIds },
       status: { $in: ['confirmed', 'active'] },
+      isDeleted: { $ne: true },
       $or: [{ startTime: { $lte: end }, endTime: { $gte: start } }],
     }).select('carId');
     const bookedCarIds = new Set(overlappingBookings.map((b) => b.carId.toString()));
