@@ -124,7 +124,11 @@ const createOfflineBooking = async (req, res) => {
     const rate = isWeekend ? car.weekendPrice : car.regularPrice;
     const bookingFare = hasOverride(bookingFareOverride) ? Number(bookingFareOverride) : hours * rate;
     const securityDeposit = hasOverride(securityDepositOverride) ? Number(securityDepositOverride) : car.securityDeposit;
-    const gst = Math.round(bookingFare * 0.18);
+    // No GST layered on top for offline bookings — the admin-entered Rent is
+    // already the final walk-in price agreed with the customer, not a
+    // pre-tax base. Adding 18% here silently inflated the total beyond what
+    // was actually collected.
+    const gst = 0;
     const doorstepCharge = doorstepDelivery ? (car.cityId?.deliveryCharge || 500) : 0;
     const totalAmount = bookingFare + gst + doorstepCharge + securityDeposit;
     const tokenAmount = Math.min(1000, Math.round(totalAmount * 0.2));
