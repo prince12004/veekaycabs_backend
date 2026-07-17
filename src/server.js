@@ -43,6 +43,30 @@ const startServer = async () => {
     }
   });
 
+  // Cron: Every 1 min — apply scheduled car inactive/active windows set via
+  // the admin "Deactivate Car" modal (inactivePeriod.from/to on the Car model)
+  cron.schedule('* * * * *', async () => {
+    try {
+      const Car = require('./models/Car');
+      const now = new Date();
+
+      const wentInactive = await Car.updateMany(
+        { isActive: true, 'inactivePeriod.from': { $lte: now } },
+        { $set: { isActive: false } }
+      );
+      const wentActive = await Car.updateMany(
+        { isActive: false, 'inactivePeriod.to': { $lt: now } },
+        { $set: { isActive: true }, $unset: { inactivePeriod: 1 } }
+      );
+
+      if (wentInactive.modifiedCount > 0 || wentActive.modifiedCount > 0) {
+        console.log(`[Cron] Cars auto-deactivated: ${wentInactive.modifiedCount}, auto-reactivated: ${wentActive.modifiedCount}`);
+      }
+    } catch (err) {
+      console.error('[Cron] Error applying scheduled car status:', err.message);
+    }
+  });
+
   // Cron: Every 15 min — send WhatsApp pickup reminder ~2h before startTime
   cron.schedule('*/15 * * * *', async () => {
     try {

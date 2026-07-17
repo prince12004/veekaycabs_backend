@@ -31,7 +31,12 @@ const getAllCars = async (req, res) => {
     if (expiryAlert === 'true') conditions.push(expiryAlertCondition());
     const filter = conditions.length ? { $and: conditions } : {};
 
-    const parsedLimit = Math.max(parseInt(limit) || 20, 1);
+    // limit=all fetches the entire matching set unpaginated — for pickers
+    // (offline booking car select, document manager) that need every car
+    // and would otherwise silently drop cars past a fixed page size once
+    // the fleet outgrows it.
+    const noLimit = limit === 'all';
+    const parsedLimit = noLimit ? 0 : Math.max(parseInt(limit) || 20, 1);
     const parsedPage = Math.max(parseInt(page) || 1, 1);
 
     // Callers that only need a few fields (e.g. a car picker dropdown) can
@@ -41,14 +46,13 @@ const getAllCars = async (req, res) => {
     if (fields) query = query.select(fields.split(',').join(' '));
     else query = query.populate('cityId', 'name slug');
 
+    query = query.sort({ createdAt: -1 });
+    if (!noLimit) query = query.skip((parsedPage - 1) * parsedLimit).limit(parsedLimit);
+
     const [total, activeCount, cars] = await Promise.all([
       Car.countDocuments(filter),
       Car.countDocuments({ ...filter, isActive: true }),
-      query
-        .sort({ createdAt: -1 })
-        .skip((parsedPage - 1) * parsedLimit)
-        .limit(parsedLimit)
-        .lean(),
+      query.lean(),
     ]);
 
     return res.json({
@@ -58,7 +62,7 @@ const getAllCars = async (req, res) => {
       activeCount,
       inactiveCount: total - activeCount,
       page: parsedPage,
-      pages: Math.ceil(total / parsedLimit) || 1,
+      pages: noLimit ? 1 : (Math.ceil(total / parsedLimit) || 1),
     });
   } catch (error) {
     console.error('admin getAllCars error:', error);
@@ -212,20 +216,69 @@ const deleteCar = async (req, res) => {
   }
 };
 
-// PATCH /api/admin/cars/:id/toggle
+// Bare "YYYY-MM-DD" strings are parsed as UTC midnight by `new Date()`, which
+// drifts against server-local "now" (e.g. IST is UTC+5:30) — a date picked as
+// "today" could compare as being hours in the future. Parsing with an
+// explicit local time avoids that drift. `endOfDay` is used for "to" so the
+// car stays inactive through the whole selected day, not just until its start.
+const parseLocalDate = (str, endOfDay = false) => {
+  if (!str) return null;
+  const bareDate = /^\d{4}-\d{2}-\d{2}$/.test(str);
+  if (bareDate) return new Date(`${str}T${endOfDay ? '23:59:59.999' : '00:00:00'}`);
+  return new Date(str);
+};
+
+// PATCH /api/admin/cars/:id/toggle — deactivating requires a reason and
+// accepts an optional from/to date range. If "from" is a future date the
+// car stays active until then (a cron job flips it off/on automatically —
+// see server.js); if "from" is today or omitted it deactivates right away.
 const toggleCarStatus = async (req, res) => {
   try {
-    const car = await Car.findByIdAndUpdate(
-      req.params.id,
-      [{ $set: { isActive: { $not: '$isActive' } } }],
-      { new: true }
-    );
-    if (!car) return res.status(404).json({ success: false, message: 'Car not found' });
+    const existing = await Car.findById(req.params.id, 'isActive');
+    if (!existing) return res.status(404).json({ success: false, message: 'Car not found' });
+
+    const willActivate = !existing.isActive;
+    let update;
+    let message;
+
+    if (willActivate) {
+      update = { $set: { isActive: true }, $unset: { inactivePeriod: 1 } };
+      message = 'Car activated successfully';
+    } else {
+      const { from, to, reason } = req.body;
+      if (!reason || !reason.trim()) {
+        return res.status(400).json({ success: false, message: 'A reason is required to deactivate a car' });
+      }
+      const fromDate = parseLocalDate(from) || new Date();
+      const toDate = parseLocalDate(to, true);
+      if (toDate && toDate < fromDate) {
+        return res.status(400).json({ success: false, message: '"To" date cannot be before "From" date' });
+      }
+
+      const startsInFuture = fromDate > new Date();
+
+      update = {
+        $set: {
+          // Stays active/bookable right up until the scheduled "from" date arrives.
+          isActive: !startsInFuture,
+          inactivePeriod: {
+            from: fromDate,
+            to: toDate || undefined,
+            reason: reason.trim(),
+          },
+        },
+      };
+      message = startsInFuture
+        ? `Car will automatically go inactive from ${fromDate.toDateString()}`
+        : 'Car deactivated successfully';
+    }
+
+    const car = await Car.findByIdAndUpdate(req.params.id, update, { new: true });
 
     return res.json({
       success: true,
-      data: { _id: car._id, isActive: car.isActive },
-      message: `Car ${car.isActive ? 'activated' : 'deactivated'} successfully`,
+      data: { _id: car._id, isActive: car.isActive, inactivePeriod: car.inactivePeriod },
+      message,
     });
   } catch (error) {
     console.error('admin toggleCarStatus error:', error);

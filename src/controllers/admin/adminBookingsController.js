@@ -80,6 +80,7 @@ const createOfflineBooking = async (req, res) => {
       userId, carId, startTime, endTime, pickupLocation,
       paymentMode = 'offline_cash', doorstepDelivery = false,
       amountPaid = 0, notes,
+      bookingFare: bookingFareOverride, securityDeposit: securityDepositOverride,
     } = req.body;
 
     if (!carId || !startTime || !endTime || !pickupLocation) {
@@ -106,13 +107,26 @@ const createOfflineBooking = async (req, res) => {
       return res.status(409).json({ success: false, message: 'Car not available for selected dates' });
     }
 
+    // Rent and security default to the car's stored pricing, but the admin can
+    // override either one on the offline-booking form (e.g. a negotiated walk-in
+    // rate, or security actually collected differing from the car's default) —
+    // whatever is entered there is what gets billed and shown on the invoice.
+    const hasOverride = (v) => v !== undefined && v !== null && v !== '';
+    if (hasOverride(bookingFareOverride) && (isNaN(Number(bookingFareOverride)) || Number(bookingFareOverride) < 0)) {
+      return res.status(400).json({ success: false, message: 'Invalid rent amount' });
+    }
+    if (hasOverride(securityDepositOverride) && (isNaN(Number(securityDepositOverride)) || Number(securityDepositOverride) < 0)) {
+      return res.status(400).json({ success: false, message: 'Invalid security deposit amount' });
+    }
+
     const hours = Math.ceil((end - start) / (1000 * 60 * 60));
     const isWeekend = [0, 6].includes(start.getDay());
     const rate = isWeekend ? car.weekendPrice : car.regularPrice;
-    const bookingFare = hours * rate;
+    const bookingFare = hasOverride(bookingFareOverride) ? Number(bookingFareOverride) : hours * rate;
+    const securityDeposit = hasOverride(securityDepositOverride) ? Number(securityDepositOverride) : car.securityDeposit;
     const gst = Math.round(bookingFare * 0.18);
     const doorstepCharge = doorstepDelivery ? (car.cityId?.deliveryCharge || 500) : 0;
-    const totalAmount = bookingFare + gst + doorstepCharge + car.securityDeposit;
+    const totalAmount = bookingFare + gst + doorstepCharge + securityDeposit;
     const tokenAmount = Math.min(1000, Math.round(totalAmount * 0.2));
     const balanceDue = totalAmount - amountPaid;
 
@@ -142,7 +156,7 @@ const createOfflineBooking = async (req, res) => {
       doorstepDelivery,
       doorstepCharge,
       bookingFare,
-      securityDeposit: car.securityDeposit,
+      securityDeposit,
       gst,
       totalAmount,
       tokenAmount,

@@ -18,6 +18,13 @@ const CarSchema = new mongoose.Schema({
   cityId: { type: mongoose.Schema.Types.ObjectId, ref: 'City', required: true },
   gpsDeviceId: { type: String },
   isActive: { type: Boolean, default: true },
+  // Set whenever an admin deactivates the car — the date range it's meant to
+  // stay off the fleet for, and why. Cleared on reactivation.
+  inactivePeriod: {
+    from: { type: Date },
+    to: { type: Date },
+    reason: { type: String, trim: true },
+  },
   slug: { type: String, unique: true },
   features: [String],
   odometer: { type: Number, default: 0 }, // current km reading, updated manually by admin
