@@ -321,10 +321,31 @@ const updateBookingStatus = async (req, res) => {
 // PUT /api/admin/bookings/:id — update dates, amount, notes
 const updateBooking = async (req, res) => {
   try {
-    const { startTime, endTime, totalAmount, amountPaid, notes, paymentMode } = req.body;
+    const { startTime, endTime, totalAmount, amountPaid, notes, paymentMode, doorstepDelivery, deliveryAddress, doorstepCharge } = req.body;
     const update = {};
     if (startTime) update.startTime = new Date(startTime);
     if (endTime)   update.endTime   = new Date(endTime);
+
+    if (doorstepDelivery !== undefined) {
+      update.doorstepDelivery = !!doorstepDelivery;
+      if (doorstepDelivery) {
+        if (!String(deliveryAddress || '').trim()) {
+          return res.status(400).json({ success: false, message: 'Delivery address is required for pickup & drop' });
+        }
+        if (deliveryAddress !== undefined) update.deliveryAddress = deliveryAddress;
+        if (doorstepCharge !== undefined) {
+          if (isNaN(Number(doorstepCharge)) || Number(doorstepCharge) < 0) {
+            return res.status(400).json({ success: false, message: 'Invalid pickup & drop charge' });
+          }
+          update.doorstepCharge = Number(doorstepCharge);
+        }
+      } else {
+        // Turned off — clear the associated address/charge so a stale
+        // doorstep charge can't linger on the invoice.
+        update.deliveryAddress = '';
+        update.doorstepCharge = 0;
+      }
+    }
 
     if (totalAmount !== undefined || amountPaid !== undefined) {
       const existing = await Booking.findById(req.params.id, 'totalAmount amountPaid closingBill');
