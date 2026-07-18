@@ -92,9 +92,10 @@ const createOfflineBooking = async (req, res) => {
   try {
     const {
       userId, carId, startTime, endTime, pickupLocation,
-      paymentMode = 'offline_cash', doorstepDelivery = false,
+      paymentMode = 'offline_cash', doorstepDelivery = false, deliveryAddress,
       amountPaid = 0, notes,
       bookingFare: bookingFareOverride, securityDeposit: securityDepositOverride,
+      doorstepCharge: doorstepChargeOverride,
     } = req.body;
 
     if (!carId || !startTime || !endTime || !pickupLocation) {
@@ -133,6 +134,12 @@ const createOfflineBooking = async (req, res) => {
     if (hasOverride(securityDepositOverride) && (isNaN(Number(securityDepositOverride)) || Number(securityDepositOverride) < 0)) {
       return res.status(400).json({ success: false, message: 'Invalid security deposit amount' });
     }
+    if (hasOverride(doorstepChargeOverride) && (isNaN(Number(doorstepChargeOverride)) || Number(doorstepChargeOverride) < 0)) {
+      return res.status(400).json({ success: false, message: 'Invalid pickup & drop charge' });
+    }
+    if (doorstepDelivery && !String(deliveryAddress || '').trim()) {
+      return res.status(400).json({ success: false, message: 'Delivery address is required for pickup & drop' });
+    }
 
     const hours = Math.ceil((end - start) / (1000 * 60 * 60));
     const isWeekend = [0, 6].includes(start.getDay());
@@ -144,7 +151,10 @@ const createOfflineBooking = async (req, res) => {
     // pre-tax base. Adding 18% here silently inflated the total beyond what
     // was actually collected.
     const gst = 0;
-    const doorstepCharge = doorstepDelivery ? (car.cityId?.deliveryCharge || 500) : 0;
+    const defaultDoorstepCharge = car.doorstepDeliveryCharge ?? car.cityId?.deliveryCharge ?? 500;
+    const doorstepCharge = doorstepDelivery
+      ? (hasOverride(doorstepChargeOverride) ? Number(doorstepChargeOverride) : defaultDoorstepCharge)
+      : 0;
     const totalAmount = bookingFare + gst + doorstepCharge + securityDeposit;
     const tokenAmount = Math.min(1000, Math.round(totalAmount * 0.2));
     const balanceDue = totalAmount - amountPaid;
@@ -173,6 +183,7 @@ const createOfflineBooking = async (req, res) => {
       endTime: end,
       pickupLocation,
       doorstepDelivery,
+      deliveryAddress: doorstepDelivery ? deliveryAddress : undefined,
       doorstepCharge,
       bookingFare,
       securityDeposit,
