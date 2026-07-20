@@ -286,12 +286,14 @@ const getDashboardInsights = async (req, res) => {
 const getSidebarCounts = async (req, res) => {
   try {
     const [
-      pendingBookings,
+      totalBookings,
       pendingKyc,
       newContacts,
       totalCars,
     ] = await Promise.all([
-      Booking.countDocuments({ status: 'confirmed', isDeleted: { $ne: true } }),
+      // The "All Bookings" nav badge — matches the page it labels, so it
+      // must be every non-deleted booking, not just ones still 'confirmed'.
+      Booking.countDocuments({ isDeleted: { $ne: true } }),
       User.countDocuments({ kycStatus: 'pending' }),
       ContactRequest.countDocuments({ status: 'new' }),
       Car.countDocuments({ isDeleted: { $ne: true } }),
@@ -299,7 +301,7 @@ const getSidebarCounts = async (req, res) => {
 
     return res.json({
       success: true,
-      data: { pendingBookings, pendingKyc, newContacts, totalCars },
+      data: { pendingBookings: totalBookings, pendingKyc, newContacts, totalCars },
     });
   } catch (error) {
     return res.status(500).json({ success: false });
