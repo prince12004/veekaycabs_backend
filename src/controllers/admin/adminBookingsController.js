@@ -11,6 +11,44 @@ const generateBookingId = () => {
   return `VK${ts}${rand}`;
 };
 
+// GET /api/admin/bookings/schedule?date=YYYY-MM-DD&city=<id>&status=confirmed
+// Day-wise car movement: "departures" = bookings starting that day (car going
+// out to a customer), "arrivals" = bookings ending that day (car coming back
+// to us). Bare "YYYY-MM-DD" parses as UTC midnight via plain `new Date()`,
+// which drifts against server-local "now" (e.g. IST) — parse with an
+// explicit local time instead, same fix as the car inactive-period cron.
+const getSchedule = async (req, res) => {
+  try {
+    const { date, city, status } = req.query;
+    const dateStr = /^\d{4}-\d{2}-\d{2}$/.test(date || '') ? date : new Date().toISOString().slice(0, 10);
+    const dayStart = new Date(`${dateStr}T00:00:00`);
+    const dayEnd = new Date(`${dateStr}T23:59:59.999`);
+
+    const baseFilter = { isDeleted: { $ne: true } };
+    if (city) baseFilter.cityId = city;
+    baseFilter.status = status || { $ne: 'cancelled' };
+
+    const populate = (q) => q
+      .populate('userId', 'name mobile')
+      .populate('carId', 'name registrationNo type')
+      .populate('cityId', 'name');
+
+    const [departures, arrivals] = await Promise.all([
+      populate(Booking.find({ ...baseFilter, startTime: { $gte: dayStart, $lte: dayEnd } })).sort({ startTime: 1 }),
+      populate(Booking.find({ ...baseFilter, endTime: { $gte: dayStart, $lte: dayEnd } })).sort({ endTime: 1 }),
+    ]);
+
+    return res.json({
+      success: true,
+      date: dateStr,
+      data: { departures, arrivals },
+    });
+  } catch (error) {
+    console.error('admin getSchedule error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to fetch schedule' });
+  }
+};
+
 // GET /api/admin/bookings
 const getAllBookings = async (req, res) => {
   try {
@@ -597,4 +635,4 @@ const sendInvoiceWhatsApp = async (req, res) => {
   }
 };
 
-module.exports = { getAllBookings, getBookingDetail, createOfflineBooking, exportBookings, updateBookingStatus, updateBooking, deleteBooking, updateVehicleVerification, sendInvoiceWhatsApp, closeBooking, markRefundPaid, sendClosingBillWhatsApp };
+module.exports = { getAllBookings, getSchedule, getBookingDetail, createOfflineBooking, exportBookings, updateBookingStatus, updateBooking, deleteBooking, updateVehicleVerification, sendInvoiceWhatsApp, closeBooking, markRefundPaid, sendClosingBillWhatsApp };

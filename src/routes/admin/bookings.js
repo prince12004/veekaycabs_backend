@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const {
   getAllBookings,
+  getSchedule,
   getBookingDetail,
   createOfflineBooking,
   exportBookings,
@@ -30,6 +31,7 @@ router.use(protectAdmin);
 
 // Core booking routes
 router.get('/export', exportBookings);
+router.get('/schedule', getSchedule);
 router.get('/', getAllBookings);
 router.post('/offline', createOfflineBooking);
 router.get('/:id', getBookingDetail);
@@ -40,8 +42,8 @@ router.patch('/:id/refund-paid', markRefundPaid);
 router.put('/:id', updateBooking);
 router.delete('/:id', requirePermission('bookings', 'delete'), deleteBooking);
 
-// Media (video/photo) upload — up to 5 files per call
-router.post('/:id/media', getUploader('booking-media').array('files', 5), uploadBookingMedia);
+// Media (video/photo) upload — up to 10 files per call
+router.post('/:id/media', getUploader('booking-media').array('files', 10), uploadBookingMedia);
 router.get('/:id/media', getBookingMedia);
 router.delete('/:id/media/:mediaId', deleteBookingMedia);
 
