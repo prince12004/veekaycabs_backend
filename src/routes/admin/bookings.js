@@ -8,6 +8,7 @@ const {
   exportBookings,
   updateBookingStatus,
   updateBooking,
+  extendBooking,
   deleteBooking,
   updateVehicleVerification,
   sendInvoiceWhatsApp,
@@ -38,6 +39,7 @@ router.get('/:id', getBookingDetail);
 router.patch('/:id/status', updateBookingStatus);
 router.patch('/:id/verification', updateVehicleVerification);
 router.patch('/:id/close', closeBooking);
+router.patch('/:id/extend', extendBooking);
 router.patch('/:id/refund-paid', markRefundPaid);
 router.put('/:id', updateBooking);
 router.delete('/:id', requirePermission('bookings', 'delete'), deleteBooking);

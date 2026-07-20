@@ -256,7 +256,7 @@ const createOfflineBooking = async (req, res) => {
     // Send WhatsApp confirmation for offline bookings too
     const offlineMobile = populated.userId?.mobile;
     if (offlineMobile && !String(offlineMobile).startsWith('google_')) {
-      sendBookingConfirmedV2ToUser(populated.userId, populated, populated.carId).catch(() => {});
+      sendBookingConfirmedV2ToUser(populated.userId, populated, populated.carId).catch(() => { });
     }
 
     return res.status(201).json({ success: true, data: populated });
@@ -353,10 +353,10 @@ const updateBookingStatus = async (req, res) => {
     if (hasRealMobile) {
       if (status === 'confirmed' || status === 'active') {
         const car = booking.carId;
-        sendBookingConfirmedV2ToUser(booking.userId, booking, car).catch(() => {});
-        notifyAdminNewBooking(booking).catch(() => {});
+        sendBookingConfirmedV2ToUser(booking.userId, booking, car).catch(() => { });
+        notifyAdminNewBooking(booking).catch(() => { });
       } else if (status === 'cancelled') {
-        sendBookingCancelledToUser(booking.userId, booking, booking.carId).catch(() => {});
+        sendBookingCancelledToUser(booking.userId, booking, booking.carId).catch(() => { });
       }
     }
 
@@ -372,7 +372,7 @@ const updateBooking = async (req, res) => {
     const { startTime, endTime, totalAmount, amountPaid, notes, paymentMode, doorstepDelivery, deliveryAddress, doorstepCharge } = req.body;
     const update = {};
     if (startTime) update.startTime = new Date(startTime);
-    if (endTime)   update.endTime   = new Date(endTime);
+    if (endTime) update.endTime = new Date(endTime);
 
     if (doorstepDelivery !== undefined) {
       update.doorstepDelivery = !!doorstepDelivery;
@@ -402,7 +402,7 @@ const updateBooking = async (req, res) => {
       const finalTotal = totalAmount !== undefined ? totalAmount : existing.totalAmount;
       const finalPaid = amountPaid !== undefined ? amountPaid : existing.amountPaid;
       if (totalAmount !== undefined) update.totalAmount = totalAmount;
-      if (amountPaid !== undefined)  update.amountPaid  = amountPaid;
+      if (amountPaid !== undefined) update.amountPaid = amountPaid;
       update.balanceDue = finalTotal - finalPaid;
 
       // If this booking was already closed, keep its final settlement bill
@@ -415,8 +415,8 @@ const updateBooking = async (req, res) => {
       }
     }
 
-    if (notes !== undefined)       update.challanDetails = notes;
-    if (paymentMode !== undefined) update.paymentMode    = paymentMode;
+    if (notes !== undefined) update.challanDetails = notes;
+    if (paymentMode !== undefined) update.paymentMode = paymentMode;
 
     const booking = await Booking.findByIdAndUpdate(req.params.id, { $set: update }, { new: true })
       .populate('userId', 'name mobile email')
@@ -427,6 +427,79 @@ const updateBooking = async (req, res) => {
   } catch (error) {
     console.error('admin updateBooking error:', error);
     return res.status(500).json({ success: false, message: 'Failed to update booking' });
+  }
+};
+
+// PATCH /api/admin/bookings/:id/extend — push the return time out (mirrors
+// the customer-facing extend in bookingsController.js, but settles
+// immediately instead of going through Razorpay: the admin sees/edits the
+// computed extra charge and records whatever extra payment was collected,
+// same "admin's entered number is final" convention as the rest of the
+// offline-booking flow — no GST is layered on top here either.
+const extendBooking = async (req, res) => {
+  try {
+    const { newEndTime, extraAmount: extraAmountOverride, additionalPaymentReceived = 0 } = req.body;
+    if (!newEndTime) {
+      return res.status(400).json({ success: false, message: 'newEndTime is required' });
+    }
+
+    const booking = await Booking.findById(req.params.id).populate('carId', 'regularPrice weekendPrice');
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+    if (!['confirmed', 'active'].includes(booking.status)) {
+      return res.status(400).json({ success: false, message: 'Only confirmed or active bookings can be extended' });
+    }
+
+    const newEnd = new Date(newEndTime);
+    if (isNaN(newEnd) || newEnd <= booking.endTime) {
+      return res.status(400).json({ success: false, message: 'New end time must be after the current end time' });
+    }
+
+    const conflict = await Booking.findOne({
+      carId: booking.carId._id,
+      _id: { $ne: booking._id },
+      status: { $in: ['confirmed', 'active'] },
+      isDeleted: { $ne: true },
+      $or: [{ startTime: { $lt: newEnd }, endTime: { $gt: booking.endTime } }],
+    });
+    if (conflict) {
+      return res.status(409).json({ success: false, message: 'Car is already booked for someone else during the extended period' });
+    }
+
+    const extraHours = Math.ceil((newEnd - booking.endTime) / (1000 * 60 * 60));
+    const car = booking.carId;
+    const isWeekend = [0, 6].includes(booking.endTime.getDay());
+    const rate = isWeekend ? car.weekendPrice : car.regularPrice;
+    const defaultExtraAmount = extraHours * rate;
+    const hasOverride = extraAmountOverride !== undefined && extraAmountOverride !== null && extraAmountOverride !== '';
+    if (hasOverride && (isNaN(Number(extraAmountOverride)) || Number(extraAmountOverride) < 0)) {
+      return res.status(400).json({ success: false, message: 'Invalid extra amount' });
+    }
+    if (isNaN(Number(additionalPaymentReceived)) || Number(additionalPaymentReceived) < 0) {
+      return res.status(400).json({ success: false, message: 'Invalid additional payment amount' });
+    }
+    const extraAmount = hasOverride ? Number(extraAmountOverride) : defaultExtraAmount;
+    const extraPaid = Number(additionalPaymentReceived) || 0;
+
+    booking.endTime = newEnd;
+    booking.bookingFare = (booking.bookingFare || 0) + extraAmount;
+    booking.totalAmount = (booking.totalAmount || 0) + extraAmount;
+    booking.amountPaid = (booking.amountPaid || 0) + extraPaid;
+    booking.balanceDue = booking.totalAmount - booking.amountPaid;
+    await booking.save();
+
+    const populated = await Booking.findById(booking._id)
+      .populate('userId', 'name mobile email')
+      .populate('carId', 'name registrationNo type')
+      .populate('cityId', 'name');
+
+    return res.json({
+      success: true,
+      data: populated,
+      message: `Booking extended by ${extraHours}h — Rs. ${extraAmount.toLocaleString('en-IN')} added`,
+    });
+  } catch (error) {
+    console.error('admin extendBooking error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to extend booking' });
   }
 };
 
@@ -477,7 +550,7 @@ const updateVehicleVerification = async (req, res) => {
 // actual charges naturally nets out as a refund below.
 const closeBooking = async (req, res) => {
   try {
-    const booking = await Booking.findById(req.params.id);
+    const booking = await Booking.findById(req.params.id).populate('carId', 'regularPrice extraKmRate');
     if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
 
     const {
@@ -486,6 +559,11 @@ const closeBooking = async (req, res) => {
     } = req.body;
 
     const num = (v) => (v === undefined || v === '' || v === null ? 0 : Number(v));
+    // If the admin's request didn't include a rate (client glitch, or a raw
+    // API call), fall back to the car's own rate instead of silently
+    // recording a Rs.0 charge — matches what the admin UI pre-fills anyway.
+    const effectiveExtraKmRate = (extraKmRate === undefined || extraKmRate === '') ? (booking.carId?.extraKmRate || 0) : num(extraKmRate);
+    const effectiveLateHourRate = (lateHourRate === undefined || lateHourRate === '') ? (booking.carId?.regularPrice || 0) : num(lateHourRate);
 
     // The pickup odometer is normally recorded during return verification;
     // if that step was skipped, let the admin supply it here instead of
@@ -504,7 +582,7 @@ const closeBooking = async (req, res) => {
     const totalKms = Math.max(0, num(closingMeter) - booking.odometerStart);
     const limit = num(kmsLimit);
     const extraKms = Math.max(0, totalKms - limit);
-    const extraKmCharge = extraKms * num(extraKmRate);
+    const extraKmCharge = extraKms * effectiveExtraKmRate;
 
     // Late return — car came back after the scheduled endTime. Charged in
     // whole hours at the given hourly rate (defaults to the car's own
@@ -514,7 +592,7 @@ const closeBooking = async (req, res) => {
     const returnTime = actualReturnTime ? new Date(actualReturnTime) : null;
     if (returnTime && !isNaN(returnTime) && returnTime > booking.endTime) {
       lateHours = Math.ceil((returnTime - booking.endTime) / (60 * 60 * 1000));
-      lateCharges = lateHours * num(lateHourRate);
+      lateCharges = lateHours * effectiveLateHourRate;
     }
 
     const charges = {
@@ -540,9 +618,9 @@ const closeBooking = async (req, res) => {
     booking.extraKmCharge = extraKmCharge;
     booking.status = 'completed';
     booking.closingBill = {
-      totalKms, kmsLimit: limit, extraKms, extraKmRate: num(extraKmRate),
+      totalKms, kmsLimit: limit, extraKms, extraKmRate: effectiveExtraKmRate,
       actualReturnTime: returnTime && !isNaN(returnTime) ? returnTime : undefined,
-      lateHours, lateHourRate: num(lateHourRate), lateCharges,
+      lateHours, lateHourRate: effectiveLateHourRate, lateCharges,
       ...charges,
       totalCharges, advancePaid, settlementAmount,
       notes: notes || '',
@@ -645,4 +723,4 @@ const sendInvoiceWhatsApp = async (req, res) => {
   }
 };
 
-module.exports = { getAllBookings, getSchedule, getBookingDetail, createOfflineBooking, exportBookings, updateBookingStatus, updateBooking, deleteBooking, updateVehicleVerification, sendInvoiceWhatsApp, closeBooking, markRefundPaid, sendClosingBillWhatsApp };
+module.exports = { getAllBookings, getSchedule, getBookingDetail, createOfflineBooking, exportBookings, updateBookingStatus, updateBooking, extendBooking, deleteBooking, updateVehicleVerification, sendInvoiceWhatsApp, closeBooking, markRefundPaid, sendClosingBillWhatsApp };
