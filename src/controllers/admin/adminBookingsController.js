@@ -65,8 +65,18 @@ const getAllBookings = async (req, res) => {
       if (to) filter.createdAt.$lte = new Date(to);
     }
     if (search) {
+      // bookingId lives on Booking itself, but car reg. no. / name and
+      // customer name / mobile live on referenced collections — resolve
+      // those to ids first so they can join the same $or.
+      const regex = new RegExp(search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      const [matchingCars, matchingUsers] = await Promise.all([
+        Car.find({ $or: [{ registrationNo: regex }, { name: regex }] }, '_id'),
+        User.find({ $or: [{ name: regex }, { mobile: regex }] }, '_id'),
+      ]);
       filter.$or = [
-        { bookingId: { $regex: search, $options: 'i' } },
+        { bookingId: regex },
+        { carId: { $in: matchingCars.map((c) => c._id) } },
+        { userId: { $in: matchingUsers.map((u) => u._id) } },
       ];
     }
 
