@@ -15,9 +15,9 @@ router.use(protectAdmin);
 
 router.get('/', getAllTempos);
 router.get('/:id', getTempoById);
-router.post('/', getUploader('tempos').array('images', 10), createTempo);
-router.put('/:id', getUploader('tempos').array('images', 10), updateTempo);
+router.post('/', requirePermission('tempoAdmin', 'add'), getUploader('tempos').array('images', 10), createTempo);
+router.put('/:id', requirePermission('tempoAdmin', 'edit'), getUploader('tempos').array('images', 10), updateTempo);
 router.delete('/:id', requirePermission('tempoAdmin', 'delete'), deleteTempo);
-router.patch('/:id/toggle', toggleTempoStatus);
+router.patch('/:id/toggle', requirePermission('tempoAdmin', 'edit'), toggleTempoStatus);
 
 module.exports = router;

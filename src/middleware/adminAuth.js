@@ -61,11 +61,22 @@ const superAdminOnly = (req, res, next) => {
 
 // Middleware factory: super_admin always passes; any other admin needs the
 // matching "<section>_<op>" flag explicitly granted via Manage Admins
-// (e.g. requirePermission('fleet', 'delete') needs permissions.fleet_delete).
+// (e.g. requirePermission('carListing', 'delete') needs permissions.carListing_delete).
 const requirePermission = (section, op) => (req, res, next) => {
   if (req.admin?.role === 'super_admin') return next();
   if (req.admin?.permissions?.[`${section}_${op}`] === true) return next();
   return res.status(403).json({ success: false, message: `You don't have permission to ${op} ${section}` });
 };
 
-module.exports = { protectAdmin, superAdminOnly, requirePermission, generateAdminTokens };
+// Some write endpoints are genuinely shared by two sidebar pages (e.g. a
+// booking can be edited/deleted from either "All Bookings" or "Offline
+// Booking" — same REST resource, no way to tell which list the admin came
+// from), so pass if ANY of the given [section, op] pairs is granted.
+const requireAnyPermission = (checks) => (req, res, next) => {
+  if (req.admin?.role === 'super_admin') return next();
+  const ok = checks.some(([section, op]) => req.admin?.permissions?.[`${section}_${op}`] === true);
+  if (ok) return next();
+  return res.status(403).json({ success: false, message: `You don't have permission to do this` });
+};
+
+module.exports = { protectAdmin, superAdminOnly, requirePermission, requireAnyPermission, generateAdminTokens };

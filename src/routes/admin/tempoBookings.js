@@ -14,9 +14,9 @@ router.use(protectAdmin);
 
 router.get('/', getAllTempoBookings);
 router.get('/:id', getTempoBookingById);
-router.post('/offline', createOfflineTempoBooking);
-router.put('/:id', updateTempoBooking);
+router.post('/offline', requirePermission('tempoAdmin', 'add'), createOfflineTempoBooking);
+router.put('/:id', requirePermission('tempoAdmin', 'edit'), updateTempoBooking);
 router.delete('/:id', requirePermission('tempoAdmin', 'delete'), deleteTempoBooking);
-router.patch('/:id/car-received', markCarReceived);
+router.patch('/:id/car-received', requirePermission('tempoAdmin', 'edit'), markCarReceived);
 
 module.exports = router;

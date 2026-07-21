@@ -14,10 +14,10 @@ const { getUploader } = require('../../middleware/upload');
 router.use(protectAdmin);
 
 router.get('/', getAllBlogs);
-router.post('/', getUploader('blogs').single('coverImage'), createBlog);
+router.post('/', requirePermission('blogs', 'add'), getUploader('blogs').single('coverImage'), createBlog);
 router.get('/:id', getBlogById);
-router.put('/:id', getUploader('blogs').single('coverImage'), updateBlog);
-router.delete('/:id', requirePermission('content', 'delete'), deleteBlog);
-router.patch('/:id/publish', togglePublish);
+router.put('/:id', requirePermission('blogs', 'edit'), getUploader('blogs').single('coverImage'), updateBlog);
+router.delete('/:id', requirePermission('blogs', 'delete'), deleteBlog);
+router.patch('/:id/publish', requirePermission('blogs', 'edit'), togglePublish);
 
 module.exports = router;

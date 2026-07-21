@@ -13,8 +13,8 @@ router.use(protectAdmin);
 
 router.get('/', getAllSeoPages);
 router.get('/:id', getSeoPageById);
-router.post('/', createSeoPage);
-router.put('/:id', updateSeoPage);
-router.delete('/:id', requirePermission('content', 'delete'), deleteSeoPage);
+router.post('/', requirePermission('seoPages', 'add'), createSeoPage);
+router.put('/:id', requirePermission('seoPages', 'edit'), updateSeoPage);
+router.delete('/:id', requirePermission('seoPages', 'delete'), deleteSeoPage);
 
 module.exports = router;

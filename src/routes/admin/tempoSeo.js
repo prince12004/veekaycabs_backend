@@ -13,8 +13,8 @@ router.use(protectAdmin);
 
 router.get('/', getAllSeoPages);
 router.get('/:id', getSeoPageById);
-router.post('/', createSeoPage);
-router.put('/:id', updateSeoPage);
+router.post('/', requirePermission('tempoAdmin', 'add'), createSeoPage);
+router.put('/:id', requirePermission('tempoAdmin', 'edit'), updateSeoPage);
 router.delete('/:id', requirePermission('tempoAdmin', 'delete'), deleteSeoPage);
 
 module.exports = router;

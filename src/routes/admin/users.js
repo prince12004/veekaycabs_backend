@@ -8,8 +8,8 @@ router.use(protectAdmin);
 router.get('/export', exportUsers);
 router.get('/', getAllUsers);
 router.get('/:id', getUserDetail);
-router.patch('/:id/block', toggleBlockUser);
-router.put('/:id', updateUser);
-router.delete('/:id', requirePermission('users', 'delete'), deleteUser);
+router.patch('/:id/block', requirePermission('userList', 'edit'), toggleBlockUser);
+router.put('/:id', requirePermission('userList', 'edit'), updateUser);
+router.delete('/:id', requirePermission('userList', 'delete'), deleteUser);
 
 module.exports = router;
