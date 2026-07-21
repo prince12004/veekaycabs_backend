@@ -1,5 +1,15 @@
 const sgMail = require('@sendgrid/mail');
 
+// Locale alone ('en-IN') only picks the display format — without an explicit
+// timeZone it renders in the server process's own timezone (often UTC in
+// production), which silently shows customers the wrong pickup/return time.
+const fmtIST = (d) =>
+  new Date(d).toLocaleString('en-IN', {
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: true,
+    timeZone: 'Asia/Kolkata',
+  });
+
 const initSendGrid = () => {
   if (process.env.SENDGRID_API_KEY && process.env.SENDGRID_API_KEY !== 'placeholder') {
     sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -47,11 +57,11 @@ const sendBookingConfirmation = async (user, booking, car) => {
         </tr>
         <tr>
           <td style="padding:10px 0;border-bottom:1px solid #E4E5EF;color:#666;">Pickup</td>
-          <td style="padding:10px 0;border-bottom:1px solid #E4E5EF;font-weight:600;">${new Date(booking.startTime).toLocaleString('en-IN')}</td>
+          <td style="padding:10px 0;border-bottom:1px solid #E4E5EF;font-weight:600;">${fmtIST(booking.startTime)}</td>
         </tr>
         <tr>
           <td style="padding:10px 0;border-bottom:1px solid #E4E5EF;color:#666;">Return</td>
-          <td style="padding:10px 0;border-bottom:1px solid #E4E5EF;font-weight:600;">${new Date(booking.endTime).toLocaleString('en-IN')}</td>
+          <td style="padding:10px 0;border-bottom:1px solid #E4E5EF;font-weight:600;">${fmtIST(booking.endTime)}</td>
         </tr>
         <tr>
           <td style="padding:10px 0;color:#666;">Total Amount</td>

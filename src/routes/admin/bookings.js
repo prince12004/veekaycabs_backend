@@ -3,6 +3,7 @@ const router = express.Router();
 const {
   getAllBookings,
   getSchedule,
+  getClosingBills,
   getBookingDetail,
   createOfflineBooking,
   exportBookings,
@@ -33,6 +34,7 @@ router.use(protectAdmin);
 // Core booking routes
 router.get('/export', exportBookings);
 router.get('/schedule', getSchedule);
+router.get('/closing-bills', getClosingBills);
 router.get('/', getAllBookings);
 router.post('/offline', createOfflineBooking);
 router.get('/:id', getBookingDetail);

@@ -148,4 +148,96 @@ const getBookingStats = async (req, res) => {
   }
 };
 
-module.exports = { getRevenueReport, getBookingStats };
+// GET /api/admin/reports/settlements?from=&to=
+// Full collection/refund exposure across ALL bookings (date range applies to
+// createdAt, same meaning throughout this report) — not just closed ones:
+//   - Pending Collection covers running/active/confirmed bookings too (using
+//     the live booking.balanceDue) AND closed bookings (using
+//     closingBill.settlementAmount, since extra-km/late/damage charges added
+//     at closing time make the top-level balanceDue stale once a bill is
+//     closed — closingBill.settlementAmount is the authoritative final due).
+//   - Pending Refunds only exists post-closing (a refund is only known once
+//     the final bill reconciles the security deposit), so it's always sourced
+//     from closingBill.settlementAmount.
+//   - statusCounts / closedCount answer "how many pending / confirmed /
+//     active / completed / cancelled / closed" for the same date range.
+// Self-correcting: once an admin records the recovered balance (Edit Booking
+// → Amount Paid) or hits "Mark Refund Paid", updateBooking/markRefundPaid
+// already keep balanceDue / closingBill.settlementAmount / refundPaid in
+// sync, so a booking drops out of these lists on its own.
+const getSettlementsReport = async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const dateConditions = [];
+    if (from) dateConditions.push({ createdAt: { $gte: new Date(`${from}T00:00:00`) } });
+    if (to) dateConditions.push({ createdAt: { $lte: new Date(`${to}T23:59:59.999`) } });
+    const dateFilter = dateConditions.length ? { $and: dateConditions } : {};
+    const notDeleted = { isDeleted: { $ne: true } };
+
+    const [bookings, statusAgg, closedCount] = await Promise.all([
+      Booking.find({ ...notDeleted, ...dateFilter, status: { $ne: 'cancelled' } })
+        .select('bookingId userId carId status totalAmount amountPaid balanceDue closingBill')
+        .populate('userId', 'name mobile')
+        .populate('carId', 'name registrationNo')
+        .sort({ createdAt: -1 }),
+      Booking.aggregate([
+        { $match: { ...notDeleted, ...dateFilter } },
+        { $group: { _id: '$status', count: { $sum: 1 } } },
+      ]),
+      Booking.countDocuments({ ...notDeleted, ...dateFilter, 'closingBill.closedAt': { $exists: true } }),
+    ]);
+
+    const statusCounts = { pending: 0, confirmed: 0, active: 0, completed: 0, cancelled: 0 };
+    statusAgg.forEach((s) => { if (s._id in statusCounts) statusCounts[s._id] = s.count; });
+
+    const pendingCollection = [];
+    const pendingRefunds = [];
+    let totalPendingCollection = 0;
+    let totalPendingRefunds = 0;
+
+    for (const b of bookings) {
+      const isClosed = !!b.closingBill?.closedAt;
+      const row = {
+        bookingId: b._id,
+        bookingCode: b.bookingId,
+        customer: b.userId?.name || 'Unknown',
+        mobile: b.userId?.mobile || '',
+        car: b.carId?.name || '',
+        regNo: b.carId?.registrationNo || '',
+        status: b.status,
+        closed: isClosed,
+      };
+      if (isClosed) {
+        const amount = b.closingBill.settlementAmount || 0;
+        if (amount > 0) {
+          pendingCollection.push({ ...row, amount });
+          totalPendingCollection += amount;
+        } else if (amount < 0 && !b.closingBill.refundPaid) {
+          pendingRefunds.push({ ...row, amount: Math.abs(amount) });
+          totalPendingRefunds += Math.abs(amount);
+        }
+      } else if ((b.balanceDue || 0) > 0) {
+        pendingCollection.push({ ...row, amount: b.balanceDue });
+        totalPendingCollection += b.balanceDue;
+      }
+    }
+    pendingCollection.sort((a, b) => b.amount - a.amount);
+
+    return res.json({
+      success: true,
+      data: {
+        statusCounts,
+        closedCount,
+        pendingCollection,
+        pendingRefunds,
+        totalPendingCollection,
+        totalPendingRefunds,
+      },
+    });
+  } catch (error) {
+    console.error('admin getSettlementsReport error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to generate settlements report' });
+  }
+};
+
+module.exports = { getRevenueReport, getBookingStats, getSettlementsReport };

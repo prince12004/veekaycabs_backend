@@ -49,6 +49,56 @@ const getSchedule = async (req, res) => {
   }
 };
 
+// GET /api/admin/bookings/closing-bills?from=&to=&page=&limit=&search=
+// Finance-style listing of every booking that's been through "Close Booking"
+// (has a closingBill), filterable by the date it was CLOSED (not created/
+// picked up) — separate from the day-to-day operational bookings list.
+const getClosingBills = async (req, res) => {
+  try {
+    const { from, to, page = 1, limit = 20, search } = req.query;
+    const conditions = [{ isDeleted: { $ne: true } }, { 'closingBill.closedAt': { $exists: true } }];
+    if (from) conditions.push({ 'closingBill.closedAt': { $gte: new Date(`${from}T00:00:00`) } });
+    if (to) conditions.push({ 'closingBill.closedAt': { $lte: new Date(`${to}T23:59:59.999`) } });
+    if (search) {
+      const regex = new RegExp(search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      const [matchingCars, matchingUsers] = await Promise.all([
+        Car.find({ $or: [{ registrationNo: regex }, { name: regex }] }, '_id'),
+        User.find({ $or: [{ name: regex }, { mobile: regex }] }, '_id'),
+      ]);
+      conditions.push({
+        $or: [
+          { bookingId: regex },
+          { carId: { $in: matchingCars.map((c) => c._id) } },
+          { userId: { $in: matchingUsers.map((u) => u._id) } },
+        ],
+      });
+    }
+    const filter = { $and: conditions };
+
+    const [total, bookings] = await Promise.all([
+      Booking.countDocuments(filter),
+      Booking.find(filter)
+        .populate('userId', 'name mobile email')
+        .populate('carId', 'name registrationNo type')
+        .populate('cityId', 'name')
+        .sort({ 'closingBill.closedAt': -1 })
+        .skip((parseInt(page) - 1) * parseInt(limit))
+        .limit(parseInt(limit)),
+    ]);
+
+    return res.json({
+      success: true,
+      data: bookings,
+      total,
+      page: parseInt(page),
+      pages: Math.ceil(total / parseInt(limit)) || 1,
+    });
+  } catch (error) {
+    console.error('admin getClosingBills error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to fetch closing bills' });
+  }
+};
+
 // GET /api/admin/bookings
 const getAllBookings = async (req, res) => {
   try {
@@ -299,15 +349,15 @@ const exportBookings = async (req, res) => {
       b.carId?.name || '',
       b.carId?.registrationNo || '',
       b.cityId?.name || '',
-      b.startTime ? new Date(b.startTime).toLocaleString('en-IN') : '',
-      b.endTime ? new Date(b.endTime).toLocaleString('en-IN') : '',
+      b.startTime ? new Date(b.startTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : '',
+      b.endTime ? new Date(b.endTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : '',
       b.status,
       b.bookingFare,
       b.gst,
       b.totalAmount,
       b.amountPaid,
       b.paymentMode,
-      new Date(b.createdAt).toLocaleString('en-IN'),
+      new Date(b.createdAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
     ]);
 
     const csv = [headers, ...rows]
@@ -723,4 +773,4 @@ const sendInvoiceWhatsApp = async (req, res) => {
   }
 };
 
-module.exports = { getAllBookings, getSchedule, getBookingDetail, createOfflineBooking, exportBookings, updateBookingStatus, updateBooking, extendBooking, deleteBooking, updateVehicleVerification, sendInvoiceWhatsApp, closeBooking, markRefundPaid, sendClosingBillWhatsApp };
+module.exports = { getAllBookings, getSchedule, getClosingBills, getBookingDetail, createOfflineBooking, exportBookings, updateBookingStatus, updateBooking, extendBooking, deleteBooking, updateVehicleVerification, sendInvoiceWhatsApp, closeBooking, markRefundPaid, sendClosingBillWhatsApp };

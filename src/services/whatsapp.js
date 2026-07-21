@@ -86,6 +86,9 @@ const fmtDate = (d) =>
   new Date(d).toLocaleString('en-IN', {
     day: '2-digit', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit', hour12: true,
+    timeZone: 'Asia/Kolkata', // locale alone only picks the format (comma/AM-PM style),
+    // not the zone — without this the server's own OS timezone (often UTC in
+    // production) leaks into customer-facing pickup/return times.
   });
 
 const fmtAmount = (n) => Number(n || 0).toLocaleString('en-IN');

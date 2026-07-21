@@ -121,7 +121,7 @@ const getDashboardStats = async (req, res) => {
       const key = d.toISOString().slice(0, 10);
       const entry = byDay.get(key);
       last7Days.push({
-        day: d.toLocaleDateString('en-IN', { weekday: 'short' }),
+        day: d.toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'Asia/Kolkata' }),
         date: key,
         revenue: entry?.revenue || 0,
         bookings: entry?.bookings || 0,
@@ -150,7 +150,7 @@ const getDashboardStats = async (req, res) => {
             car: car.name,
             plate: car.registrationNo,
             doc: label,
-            expiry: exp.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+            expiry: exp.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }),
             daysLeft,
             level: daysLeft <= 7 ? 'critical' : daysLeft <= 15 ? 'warning' : 'ok',
           });

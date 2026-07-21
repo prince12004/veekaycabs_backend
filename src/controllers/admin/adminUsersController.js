@@ -157,7 +157,7 @@ const exportUsers = async (req, res) => {
       u.kycStatus,
       u.isBlocked ? 'Yes' : 'No',
       u.totalBookings || 0,
-      new Date(u.createdAt).toLocaleString('en-IN'),
+      new Date(u.createdAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
     ]);
 
     const csv = [headers, ...rows]

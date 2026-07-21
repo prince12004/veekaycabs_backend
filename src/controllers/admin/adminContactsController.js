@@ -62,7 +62,7 @@ const exportContacts = async (req, res) => {
       c.subject || '',
       c.message || '',
       c.status,
-      new Date(c.createdAt).toLocaleString('en-IN'),
+      new Date(c.createdAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
     ]);
 
     const csv = [headers, ...rows]
