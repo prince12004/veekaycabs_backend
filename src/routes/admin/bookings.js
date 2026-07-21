@@ -37,6 +37,18 @@ router.use(protectAdmin);
 const editEither = requireAnyPermission([['allBookings', 'edit'], ['offlineBooking', 'edit']]);
 const deleteEither = requireAnyPermission([['allBookings', 'delete'], ['offlineBooking', 'delete']]);
 
+// A sub-admin can be handed just "upload verification images" or just
+// "extend booking" without full booking edit — full edit (editEither) always
+// covers these too, since it's a superset.
+const uploadMediaEither = requireAnyPermission([
+  ['allBookings', 'edit'], ['offlineBooking', 'edit'],
+  ['allBookings', 'uploadMedia'], ['offlineBooking', 'uploadMedia'],
+]);
+const extendEither = requireAnyPermission([
+  ['allBookings', 'edit'], ['offlineBooking', 'edit'],
+  ['allBookings', 'extend'], ['offlineBooking', 'extend'],
+]);
+
 // Core booking routes
 router.get('/export', exportBookings);
 router.get('/schedule', getSchedule);
@@ -47,15 +59,15 @@ router.get('/:id', getBookingDetail);
 router.patch('/:id/status', editEither, updateBookingStatus);
 router.patch('/:id/verification', editEither, updateVehicleVerification);
 router.patch('/:id/close', editEither, closeBooking);
-router.patch('/:id/extend', editEither, extendBooking);
+router.patch('/:id/extend', extendEither, extendBooking);
 router.patch('/:id/refund-paid', editEither, markRefundPaid);
 router.put('/:id', editEither, updateBooking);
 router.delete('/:id', deleteEither, deleteBooking);
 
 // Media (video/photo) upload — up to 10 files per call
-router.post('/:id/media', editEither, getUploader('booking-media').array('files', 10), uploadBookingMedia);
+router.post('/:id/media', uploadMediaEither, getUploader('booking-media').array('files', 10), uploadBookingMedia);
 router.get('/:id/media', getBookingMedia);
-router.delete('/:id/media/:mediaId', editEither, deleteBookingMedia);
+router.delete('/:id/media/:mediaId', uploadMediaEither, deleteBookingMedia);
 
 // AI dent analysis (compares pickup vs return media)
 router.post('/:id/analyze-damage', editEither, analyzeVehicleDamage);
