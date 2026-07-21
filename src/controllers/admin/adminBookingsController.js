@@ -568,7 +568,6 @@ const updateVehicleVerification = async (req, res) => {
     const field = stage === 'pickup' ? 'pickupCondition' : 'returnCondition';
     const update = {
       [`${field}.fuel`]: fuel,
-      [`${field}.odometer`]: odometer,
       [`${field}.challan`]: challan,
       [`${field}.damage`]: damage,
       [`${field}.extras`]: extras,
@@ -577,8 +576,15 @@ const updateVehicleVerification = async (req, res) => {
       [`${field}.documents`]: documents,
       [`${field}.recordedAt`]: new Date(),
     };
-    if (stage === 'pickup' && odometer !== undefined && odometer !== '') update.odometerStart = odometer;
-    if (stage === 'return' && odometer !== undefined && odometer !== '') update.odometerEnd = odometer;
+    // odometer is a Number field — an empty string from the form would throw
+    // a Mongoose CastError and fail the whole save, so only write it when a
+    // real value was entered (this was the cause of "Failed to save return
+    // verification" whenever the odometer box was left blank).
+    if (odometer !== undefined && odometer !== '') {
+      update[`${field}.odometer`] = odometer;
+      if (stage === 'pickup') update.odometerStart = odometer;
+      if (stage === 'return') update.odometerEnd = odometer;
+    }
 
     const booking = await Booking.findByIdAndUpdate(req.params.id, { $set: update }, { new: true })
       .populate('userId', 'name mobile email')
