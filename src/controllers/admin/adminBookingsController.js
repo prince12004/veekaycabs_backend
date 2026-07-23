@@ -340,7 +340,7 @@ const exportBookings = async (req, res) => {
       'Car', 'Reg No', 'City', 'Start Time', 'End Time',
       'Status', 'Booking Fare', 'GST', 'Total Amount', 'Amount Paid', 'Payment Mode', 'Created At',
     ];
-
+    
     const rows = bookings.map((b) => [
       b.bookingId,
       b.userId?.name || '',
