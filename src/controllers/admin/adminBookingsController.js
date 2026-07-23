@@ -419,10 +419,21 @@ const updateBookingStatus = async (req, res) => {
 // PUT /api/admin/bookings/:id — update dates, amount, notes
 const updateBooking = async (req, res) => {
   try {
-    const { startTime, endTime, totalAmount, amountPaid, notes, paymentMode, doorstepDelivery, deliveryAddress, doorstepCharge } = req.body;
+    const { startTime, endTime, totalAmount, bookingFare, amountPaid, notes, paymentMode, doorstepDelivery, deliveryAddress, doorstepCharge } = req.body;
     const update = {};
     if (startTime) update.startTime = new Date(startTime);
     if (endTime) update.endTime = new Date(endTime);
+    // bookingFare ("Day Rental") is a separate field from totalAmount — it's
+    // what the closing bill's Final Settlement math reads. Editing dates
+    // alone never touched it before, so shortening/lengthening a booking
+    // left the old rent frozen in the closing bill even after totalAmount
+    // was corrected. Admin sets it explicitly, same as the rest of this form.
+    if (bookingFare !== undefined) {
+      if (isNaN(Number(bookingFare)) || Number(bookingFare) < 0) {
+        return res.status(400).json({ success: false, message: 'Invalid day rental amount' });
+      }
+      update.bookingFare = Number(bookingFare);
+    }
 
     if (doorstepDelivery !== undefined) {
       update.doorstepDelivery = !!doorstepDelivery;
@@ -459,7 +470,12 @@ const updateBooking = async (req, res) => {
       // in sync with a corrected payment figure — otherwise the stored
       // closing bill (and any future WhatsApp send/reprint of it) would
       // keep showing the old, now-stale refund/balance-due amount.
-      if (existing.closingBill?.closedAt && amountPaid !== undefined) {
+      // Skipped when bookingFare is *also* changing in this same request —
+      // existing.closingBill.totalCharges is still the pre-edit figure at
+      // this point, so patching settlementAmount from it here would blend a
+      // corrected payment against a stale rent. Use "Recalculate Closing
+      // Bill" after this save instead, which recomputes totalCharges fresh.
+      if (existing.closingBill?.closedAt && amountPaid !== undefined && bookingFare === undefined) {
         update['closingBill.advancePaid'] = amountPaid;
         update['closingBill.settlementAmount'] = (existing.closingBill.totalCharges || 0) - amountPaid;
       }
