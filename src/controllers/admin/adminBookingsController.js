@@ -49,13 +49,18 @@ const getSchedule = async (req, res) => {
   }
 };
 
-// GET /api/admin/bookings/closing-bills?from=&to=&page=&limit=&search=
+// GET /api/admin/bookings/closing-bills?from=&to=&page=&limit=&search=&settlementType=due|refund
 // Finance-style listing of every booking that's been through "Close Booking"
 // (has a closingBill), filterable by the date it was CLOSED (not created/
 // picked up) — separate from the day-to-day operational bookings list.
+// settlementType narrows the LIST to just bookings with money due / refund
+// pending, server-side (across all matching bookings, not just this page) —
+// while the Due/Refund totals below always reflect the full date/search
+// scope regardless of which tile (if any) is currently selected, so the
+// two summary numbers don't shift depending on what's filtered.
 const getClosingBills = async (req, res) => {
   try {
-    const { from, to, page = 1, limit = 20, search } = req.query;
+    const { from, to, page = 1, limit = 20, search, settlementType } = req.query;
     const conditions = [{ isDeleted: { $ne: true } }, { 'closingBill.closedAt': { $exists: true } }];
     if (from) conditions.push({ 'closingBill.closedAt': { $gte: new Date(`${from}T00:00:00`) } });
     if (to) conditions.push({ 'closingBill.closedAt': { $lte: new Date(`${to}T23:59:59.999`) } });
@@ -73,10 +78,21 @@ const getClosingBills = async (req, res) => {
         ],
       });
     }
-    const filter = { $and: conditions };
+    const baseFilter = { $and: conditions };
 
-    const [total, bookings] = await Promise.all([
+    const listConditions = [...conditions];
+    if (settlementType === 'due') {
+      listConditions.push({ 'closingBill.settlementAmount': { $gt: 0 } });
+    } else if (settlementType === 'refund') {
+      listConditions.push({ 'closingBill.settlementAmount': { $lt: 0 }, 'closingBill.refundPaid': { $ne: true } });
+    }
+    const filter = { $and: listConditions };
+
+    const [total, grandTotal, bookings, totalsAgg] = await Promise.all([
       Booking.countDocuments(filter),
+      // Unaffected by settlementType — the "Closed Bookings" tile always shows
+      // every closed booking in the date/search scope, not just the filtered subset.
+      Booking.countDocuments(baseFilter),
       Booking.find(filter)
         .populate('userId', 'name mobile email')
         .populate('carId', 'name registrationNo type')
@@ -84,14 +100,37 @@ const getClosingBills = async (req, res) => {
         .sort({ 'closingBill.closedAt': -1 })
         .skip((parseInt(page) - 1) * parseInt(limit))
         .limit(parseInt(limit)),
+      Booking.aggregate([
+        { $match: baseFilter },
+        {
+          $group: {
+            _id: null,
+            totalDue: {
+              $sum: { $cond: [{ $gt: ['$closingBill.settlementAmount', 0] }, '$closingBill.settlementAmount', 0] },
+            },
+            totalRefund: {
+              $sum: {
+                $cond: [
+                  { $and: [{ $lt: ['$closingBill.settlementAmount', 0] }, { $ne: ['$closingBill.refundPaid', true] }] },
+                  { $abs: '$closingBill.settlementAmount' },
+                  0,
+                ],
+              },
+            },
+          },
+        },
+      ]),
     ]);
 
     return res.json({
       success: true,
       data: bookings,
       total,
+      grandTotal,
       page: parseInt(page),
       pages: Math.ceil(total / parseInt(limit)) || 1,
+      totalDue: totalsAgg[0]?.totalDue || 0,
+      totalRefund: totalsAgg[0]?.totalRefund || 0,
     });
   } catch (error) {
     console.error('admin getClosingBills error:', error);
