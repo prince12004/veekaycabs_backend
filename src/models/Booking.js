@@ -8,6 +8,7 @@ const BookingSchema = new mongoose.Schema({
   startTime: { type: Date, required: true },
   endTime: { type: Date, required: true },
   pickupLocation: { type: String, required: true },
+  bookedBy: { type: String },
   doorstepDelivery: { type: Boolean, default: false },
   deliveryAddress: { type: String },
   doorstepCharge: { type: Number, default: 0 },

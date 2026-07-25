@@ -84,6 +84,62 @@ const getRevenueReport = async (req, res) => {
   }
 };
 
+// GET /api/admin/reports/car-revenue
+const getCarRevenueReport = async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const fromDate = from ? new Date(from) : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    const toDate = to ? new Date(to) : new Date();
+
+    const revenueData = await Booking.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: fromDate, $lte: toDate },
+          status: { $in: ['confirmed', 'active', 'completed'] },
+          isDeleted: { $ne: true },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            carId: '$carId',
+            month: { $dateToString: { format: '%Y-%m', date: '$createdAt' } },
+          },
+          totalRevenue: { $sum: '$totalAmount' },
+          collectedRevenue: { $sum: '$amountPaid' },
+          bookingCount: { $sum: 1 },
+        },
+      },
+      { $sort: { '_id.month': 1, '_id.carId': 1 } },
+      {
+        $lookup: {
+          from: 'cars',
+          localField: '_id.carId',
+          foreignField: '_id',
+          as: 'car',
+        },
+      },
+      { $unwind: { path: '$car', preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          month: '$_id.month',
+          carId: '$_id.carId',
+          totalRevenue: 1,
+          collectedRevenue: 1,
+          bookingCount: 1,
+          carName: '$car.name',
+          registrationNo: '$car.registrationNo',
+        },
+      },
+    ]);
+
+    return res.json({ success: true, data: revenueData });
+  } catch (error) {
+    console.error('admin getCarRevenueReport error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to generate car revenue report' });
+  }
+};
+
 // GET /api/admin/reports/bookings
 const getBookingStats = async (req, res) => {
   try {
@@ -240,4 +296,4 @@ const getSettlementsReport = async (req, res) => {
   }
 };
 
-module.exports = { getRevenueReport, getBookingStats, getSettlementsReport };
+module.exports = { getRevenueReport, getBookingStats, getCarRevenueReport, getSettlementsReport };

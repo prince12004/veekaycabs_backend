@@ -230,6 +230,7 @@ const createOfflineBooking = async (req, res) => {
     const {
       userId, carId, startTime, endTime, pickupLocation,
       paymentMode = 'offline_cash', doorstepDelivery = false, deliveryAddress,
+      bookedBy,
       amountPaid = 0, notes,
       bookingFare: bookingFareOverride, securityDeposit: securityDepositOverride,
       doorstepCharge: doorstepChargeOverride,
@@ -319,6 +320,7 @@ const createOfflineBooking = async (req, res) => {
       startTime: start,
       endTime: end,
       pickupLocation,
+      bookedBy: bookedBy ? String(bookedBy) : undefined,
       doorstepDelivery,
       deliveryAddress: doorstepDelivery ? deliveryAddress : undefined,
       doorstepCharge,
@@ -379,7 +381,7 @@ const exportBookings = async (req, res) => {
       'Car', 'Reg No', 'City', 'Start Time', 'End Time',
       'Status', 'Booking Fare', 'GST', 'Total Amount', 'Amount Paid', 'Payment Mode', 'Created At',
     ];
-    
+
     const rows = bookings.map((b) => [
       b.bookingId,
       b.userId?.name || '',
@@ -458,10 +460,39 @@ const updateBookingStatus = async (req, res) => {
 // PUT /api/admin/bookings/:id — update dates, amount, notes
 const updateBooking = async (req, res) => {
   try {
-    const { startTime, endTime, totalAmount, bookingFare, amountPaid, notes, paymentMode, doorstepDelivery, deliveryAddress, doorstepCharge } = req.body;
+    const { startTime, endTime, totalAmount, bookingFare, amountPaid, notes, paymentMode, doorstepDelivery, deliveryAddress, doorstepCharge, carId, bookedBy } = req.body;
     const update = {};
     if (startTime) update.startTime = new Date(startTime);
     if (endTime) update.endTime = new Date(endTime);
+    if (carId) {
+      if (!carId) return res.status(400).json({ success: false, message: 'Invalid car selection' });
+      const existingBooking = await Booking.findById(req.params.id, 'startTime endTime carId');
+      if (!existingBooking) return res.status(404).json({ success: false, message: 'Booking not found' });
+      if (String(existingBooking.carId) !== String(carId)) {
+        const newCar = await Car.findById(carId);
+        if (!newCar || !newCar.isActive) return res.status(404).json({ success: false, message: 'Selected car not available' });
+        const conflictStart = startTime ? new Date(startTime) : existingBooking.startTime;
+        const conflictEnd = endTime ? new Date(endTime) : existingBooking.endTime;
+        if (isNaN(conflictStart.getTime()) || isNaN(conflictEnd.getTime())) {
+          return res.status(400).json({ success: false, message: 'Invalid booking dates' });
+        }
+        const conflict = await Booking.findOne({
+          carId,
+          _id: { $ne: existingBooking._id },
+          status: { $in: ['confirmed', 'active'] },
+          isDeleted: { $ne: true },
+          $or: [
+            { startTime: { $lt: conflictEnd }, endTime: { $gt: conflictStart } },
+          ],
+        });
+        if (conflict) {
+          return res.status(409).json({ success: false, message: 'Selected car is already booked for this period' });
+        }
+        update.carId = newCar._id;
+        update.cityId = newCar.cityId;
+      }
+    }
+    if (bookedBy !== undefined) update.bookedBy = bookedBy;
     // bookingFare ("Day Rental") is a separate field from totalAmount — it's
     // what the closing bill's Final Settlement math reads. Editing dates
     // alone never touched it before, so shortening/lengthening a booking
