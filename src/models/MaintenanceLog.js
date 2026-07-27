@@ -4,7 +4,7 @@ const MaintenanceLogSchema = new mongoose.Schema({
   carId: { type: mongoose.Schema.Types.ObjectId, ref: 'Car', required: true },
   category: {
     type: String,
-    enum: ['Service', 'Parts Replacement', 'Tyre', 'Alignment', 'Battery', 'AC', 'Denting/Painting', 'Other'],
+    enum: ['Service', 'Fare', 'Fuel', 'Tyre', 'Denting Painting', 'Engine Work', 'Other'],
     default: 'Other',
   },
   amount: { type: Number, required: true },
