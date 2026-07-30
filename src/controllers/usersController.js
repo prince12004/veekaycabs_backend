@@ -1,7 +1,7 @@
 const User = require('../models/User');
 const UserDocument = require('../models/UserDocument');
 const { getFileUrl } = require('../middleware/upload');
-const { getRedis } = require('../config/redis');
+const { retrieveOtp, deleteOtp } = require('./authController');
 
 // GET /api/users/profile
 const getProfile = async (req, res) => {
@@ -34,11 +34,23 @@ const updateProfile = async (req, res) => {
     const { name, email, address, mobile } = req.body;
     const updates = {};
     if (name !== undefined) updates.name = name.trim();
-    if (email !== undefined) updates.email = email.toLowerCase().trim();
-    if (address !== undefined) updates.address = address.trim();
+    if (email !== undefined) {
+      const cleanedEmail = email.toLowerCase().trim();
+      if (cleanedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanedEmail)) {
+        return res.status(400).json({ success: false, message: 'Enter a valid email address' });
+      }
+      updates.email = cleanedEmail;
+    }
+    if (address !== undefined) {
+      const cleanedAddress = address.trim();
+      if (cleanedAddress.length > 100) {
+        return res.status(400).json({ success: false, message: 'Address must be 100 characters or less' });
+      }
+      updates.address = cleanedAddress;
+    }
     if (mobile !== undefined) {
       const cleaned = mobile.replace(/\D/g, '');
-      if (!/^\d{10}$/.test(cleaned)) {
+      if (!/^[6-9]\d{9}$/.test(cleaned)) {
         return res.status(400).json({ success: false, message: 'Enter a valid 10-digit mobile number' });
       }
       // Only allow update if current mobile is a Google placeholder
@@ -98,7 +110,7 @@ const addMobile = async (req, res) => {
     }
 
     const cleaned = mobile.replace(/\D/g, '');
-    if (!/^\d{10}$/.test(cleaned)) {
+    if (!/^[6-9]\d{9}$/.test(cleaned)) {
       return res.status(400).json({ success: false, message: 'Enter a valid 10-digit mobile number' });
     }
 
@@ -106,16 +118,18 @@ const addMobile = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Mobile already set' });
     }
 
-    // Verify OTP from Redis (same store as authController uses)
-    let storedOtp = null;
-    const redis = getRedis();
-    if (redis) {
-      storedOtp = await redis.get(`otp:${cleaned}`);
+    // Same store authController's sendOtp/verifyOtp use (Redis, falling back
+    // to an in-memory map when Redis isn't configured) — reading straight
+    // from Redis here meant this always failed with "no OTP" whenever the
+    // fallback store was the one actually holding it.
+    const storedOtp = await retrieveOtp(cleaned);
+    if (!storedOtp) {
+      return res.status(400).json({ success: false, message: 'OTP Expired' });
     }
-    if (!storedOtp || String(storedOtp) !== String(otp)) {
-      return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
+    if (String(storedOtp) !== String(otp)) {
+      return res.status(400).json({ success: false, message: 'Invalid OTP' });
     }
-    if (redis) await redis.del(`otp:${cleaned}`);
+    await deleteOtp(cleaned);
 
     // Check mobile not taken by another user
     const existing = await User.findOne({ mobile: cleaned });

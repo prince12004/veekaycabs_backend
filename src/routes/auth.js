@@ -25,6 +25,20 @@ const configurePassport = () => {
             user = await User.findOne({ email });
           }
 
+          // Admin soft-deletion also sets isBlocked, so simply letting this
+          // record through would issue a token that 403s on every request
+          // right after — effectively "can't log in again" from the user's
+          // side. Instead of resurrecting or blocking, free up the unique
+          // googleId/mobile on the old (deleted) row and let a fresh account
+          // get created below — the deleted row and its booking history are
+          // left completely untouched.
+          if (user && user.isDeleted) {
+            user.googleId = `deleted_${user.googleId || profile.id}_${Date.now()}`;
+            user.mobile = `deleted_${user.mobile}_${Date.now()}`;
+            await user.save();
+            user = null;
+          }
+
           if (!user) {
             user = await User.create({
               googleId: profile.id,

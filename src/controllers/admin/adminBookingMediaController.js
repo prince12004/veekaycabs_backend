@@ -442,7 +442,7 @@ const sendCarDocsWhatsApp = async (req, res) => {
     const { overrideMobile } = req.body;
     let mobile = booking.userId?.mobile;
     if (!mobile || mobile.startsWith('google_')) {
-      if (!overrideMobile || !/^\d{10}$/.test(overrideMobile)) {
+      if (!overrideMobile || !/^[6-9]\d{9}$/.test(overrideMobile)) {
         return res.status(400).json({ success: false, message: 'Customer has no valid mobile. Provide a 10-digit overrideMobile.' });
       }
       mobile = overrideMobile;

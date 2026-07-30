@@ -23,7 +23,7 @@ const createContactRequest = async (req, res) => {
     if (!name || !mobile) {
       return res.status(400).json({ success: false, message: 'name and mobile are required' });
     }
-    if (!/^\d{10}$/.test(mobile)) {
+    if (!/^[6-9]\d{9}$/.test(mobile)) {
       return res.status(400).json({ success: false, message: 'Valid 10-digit mobile number required' });
     }
 

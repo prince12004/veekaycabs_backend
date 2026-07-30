@@ -54,6 +54,17 @@ const createBooking = async (req, res) => {
       return res.status(400).json({ success: false, message: 'carId, startTime, endTime, pickupLocation are required' });
     }
 
+    // Google sign-in leaves a `google_<id>` placeholder mobile until the user
+    // explicitly adds and OTP-verifies a real one — booking confirmations go
+    // out over WhatsApp/SMS to that number, so it can't be skipped.
+    if (String(req.user.mobile || '').startsWith('google_')) {
+      return res.status(403).json({
+        success: false,
+        code: 'MOBILE_NOT_VERIFIED',
+        message: 'Please add and verify your mobile number before booking',
+      });
+    }
+
     const start = new Date(startTime);
     const end = new Date(endTime);
     if (isNaN(start) || isNaN(end) || start >= end || start < new Date()) {

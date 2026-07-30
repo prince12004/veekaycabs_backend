@@ -97,7 +97,7 @@ const updateUser = async (req, res) => {
     if (address !== undefined) updates.address = String(address).trim();
     if (mobile !== undefined) {
       const cleaned = String(mobile).replace(/\D/g, '');
-      if (!/^\d{10}$/.test(cleaned)) {
+      if (!/^[6-9]\d{9}$/.test(cleaned)) {
         return res.status(400).json({ success: false, message: 'Enter a valid 10-digit mobile number' });
       }
       updates.mobile = cleaned;

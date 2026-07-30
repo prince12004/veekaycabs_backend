@@ -46,7 +46,7 @@ const deleteOtp = async (mobile) => {
 const sendOtp = async (req, res) => {
   try {
     const { mobile } = req.body;
-    if (!mobile || !/^\d{10}$/.test(mobile)) {
+    if (!mobile || !/^[6-9]\d{9}$/.test(mobile)) {
       return res.status(400).json({ success: false, message: 'Valid 10-digit mobile number required' });
     }
 
@@ -72,8 +72,11 @@ const verifyOtp = async (req, res) => {
     }
 
     const storedOtp = await retrieveOtp(mobile);
-    if (!storedOtp || storedOtp !== String(otp)) {
-      return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
+    if (!storedOtp) {
+      return res.status(400).json({ success: false, message: 'OTP Expired' });
+    }
+    if (storedOtp !== String(otp)) {
+      return res.status(400).json({ success: false, message: 'Invalid OTP' });
     }
 
     await deleteOtp(mobile);
@@ -229,4 +232,4 @@ const googleCallback = async (req, res) => {
   }
 };
 
-module.exports = { sendOtp, verifyOtp, adminLogin, refreshToken, logout, googleCallback };
+module.exports = { sendOtp, verifyOtp, adminLogin, refreshToken, logout, googleCallback, retrieveOtp, deleteOtp };
