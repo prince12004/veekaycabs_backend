@@ -82,14 +82,20 @@ const verifyOtp = async (req, res) => {
     await deleteOtp(mobile);
 
     let user = await User.findOne({ mobile });
+
+    // Admin soft-deletion also sets isBlocked, so simply letting this record
+    // through would 403 on every request right after login. Instead of
+    // blocking re-entry, free up the mobile number on the old (deleted) row
+    // — its booking history is left completely untouched — and let a brand
+    // new account get created below, same as the Google sign-in path.
+    if (user?.isDeleted) {
+      user.mobile = `deleted_${user.mobile}_${Date.now()}`;
+      await user.save();
+      user = null;
+    }
+
     const isNewUser = !user;
 
-    // Reject at login (not just via middleware on the next request) so the
-    // failure is clear instead of an OTP that "succeeds" but leaves every
-    // subsequent API call silently 403ing.
-    if (user?.isDeleted) {
-      return res.status(403).json({ success: false, message: 'This account has been removed. Please contact support.' });
-    }
     if (user?.isBlocked) {
       return res.status(403).json({ success: false, message: 'Your account has been blocked. Please contact support.' });
     }
