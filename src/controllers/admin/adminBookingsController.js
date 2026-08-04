@@ -233,7 +233,7 @@ const createOfflineBooking = async (req, res) => {
       bookedBy,
       amountPaid = 0, notes,
       bookingFare: bookingFareOverride, securityDeposit: securityDepositOverride,
-      doorstepCharge: doorstepChargeOverride,
+      doorstepCharge: doorstepChargeOverride, gstPercent = 0,
     } = req.body;
 
     if (!carId || !startTime || !endTime || !pickupLocation) {
@@ -275,6 +275,9 @@ const createOfflineBooking = async (req, res) => {
     if (hasOverride(doorstepChargeOverride) && (isNaN(Number(doorstepChargeOverride)) || Number(doorstepChargeOverride) < 0)) {
       return res.status(400).json({ success: false, message: 'Invalid pickup & drop charge' });
     }
+    if (isNaN(Number(gstPercent)) || Number(gstPercent) < 0 || Number(gstPercent) > 100) {
+      return res.status(400).json({ success: false, message: 'Invalid GST percentage' });
+    }
     if (doorstepDelivery && !String(deliveryAddress || '').trim()) {
       return res.status(400).json({ success: false, message: 'Delivery address is required for pickup & drop' });
     }
@@ -284,11 +287,13 @@ const createOfflineBooking = async (req, res) => {
     const rate = isWeekend ? car.weekendPrice : car.regularPrice;
     const bookingFare = hasOverride(bookingFareOverride) ? Number(bookingFareOverride) : hours * rate;
     const securityDeposit = hasOverride(securityDepositOverride) ? Number(securityDepositOverride) : car.securityDeposit;
-    // No GST layered on top for offline bookings — the admin-entered Rent is
-    // already the final walk-in price agreed with the customer, not a
-    // pre-tax base. Adding 18% here silently inflated the total beyond what
-    // was actually collected.
-    const gst = 0;
+    // GST is off (0%) by default for offline bookings — the admin-entered
+    // Rent is normally the final walk-in price already agreed with the
+    // customer, not a pre-tax base, so auto-adding a fixed rate would
+    // silently inflate the total beyond what was actually collected.
+    // Admin can still opt in per-booking by setting a GST % explicitly
+    // (e.g. for a corporate customer who needs a GST-inclusive invoice).
+    const gst = Math.round(bookingFare * (Number(gstPercent) / 100));
     const defaultDoorstepCharge = car.doorstepDeliveryCharge ?? car.cityId?.deliveryCharge ?? 500;
     const doorstepCharge = doorstepDelivery
       ? (hasOverride(doorstepChargeOverride) ? Number(doorstepChargeOverride) : defaultDoorstepCharge)
@@ -460,7 +465,7 @@ const updateBookingStatus = async (req, res) => {
 // PUT /api/admin/bookings/:id — update dates, amount, notes
 const updateBooking = async (req, res) => {
   try {
-    const { startTime, endTime, totalAmount, bookingFare, amountPaid, notes, paymentMode, doorstepDelivery, deliveryAddress, doorstepCharge, carId, bookedBy } = req.body;
+    const { startTime, endTime, totalAmount, bookingFare, gst, amountPaid, notes, paymentMode, doorstepDelivery, deliveryAddress, doorstepCharge, carId, bookedBy } = req.body;
     const update = {};
     if (startTime) update.startTime = new Date(startTime);
     if (endTime) update.endTime = new Date(endTime);
@@ -503,6 +508,16 @@ const updateBooking = async (req, res) => {
         return res.status(400).json({ success: false, message: 'Invalid day rental amount' });
       }
       update.bookingFare = Number(bookingFare);
+    }
+    // GST as a direct amount here (not a %) — the admin already sees the
+    // rent and can just type the rupee figure they want on the invoice.
+    // Stays 0/untouched unless explicitly set, same opt-in behaviour as
+    // offline booking creation.
+    if (gst !== undefined) {
+      if (isNaN(Number(gst)) || Number(gst) < 0) {
+        return res.status(400).json({ success: false, message: 'Invalid GST amount' });
+      }
+      update.gst = Number(gst);
     }
 
     if (doorstepDelivery !== undefined) {

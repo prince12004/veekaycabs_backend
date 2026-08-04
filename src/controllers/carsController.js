@@ -59,7 +59,7 @@ const getAvailableCars = async (req, res) => {
     const carsWithPricing = allCars.map((car) => {
       const rate = isWeekend ? car.weekendPrice : car.regularPrice;
       const bookingFare = hours * rate;
-      const gst = Math.round(bookingFare * 0.18);
+      const gst = Math.round(bookingFare * 0.12);
       return {
         ...car.toObject(),
         isAvailable: !bookedCarIds.has(car._id.toString()),

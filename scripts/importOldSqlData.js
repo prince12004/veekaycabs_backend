@@ -15,11 +15,24 @@ const mongoose = require('mongoose');
 const connectDB = require('../src/config/db');
 const Blog = require('../src/models/Blog');
 const CarSeoPage = require('../src/models/CarSeoPage');
+const TempoSeoPage = require('../src/models/TempoSeoPage');
 
 const DRY_RUN = process.argv.includes('--dry-run');
 
 const BLOG_SQL_PATH = path.join(require('os').homedir(), 'Downloads', 'blog.sql');
 const PAGES_SQL_PATH = path.join(require('os').homedir(), 'Downloads', 'tbl_pages.sql');
+const TEMPO_PAGES_SQL_PATH = path.join(require('os').homedir(), 'Downloads', 'tempo_pages.sql');
+
+// The old site's export mangled the ₹ symbol and one recurring emoji/joiner
+// sequence into visible mojibake — fix just those, without otherwise
+// touching the editorial content.
+const cleanMojibake = (s) => {
+  if (!s) return s;
+  return s
+    .split('â¹').join('₹')
+    .split('â&zwj;â&zwnj;&zwj;â&zwj;&zwnj;').join(' ')
+    .replace(/[ \t]{2,}/g, ' ');
+};
 
 // ─── Minimal MySQL dump VALUES parser ──────────────────────────────────────
 // Handles a single `INSERT INTO \`table\` (...) VALUES (...),(...),...;`
@@ -174,11 +187,60 @@ async function importPages() {
   if (!DRY_RUN) console.log(`[tbl_pages] created ${created}, skipped ${skipped} (already existed)`);
 }
 
+async function importTempoPages() {
+  const sql = fs.readFileSync(TEMPO_PAGES_SQL_PATH, 'utf8');
+  // Same column layout as tbl_pages above: id, page_title, slug, short_content,
+  // content, images, meta_keyword, meta_description, status, created_on,
+  // updated_on, h1_tag, parent, author, robots, meta_title
+  const rows = parseInsertRows(sql, 'tempo_pages');
+  console.log(`\n[tempo_pages] parsed ${rows.length} rows from ${TEMPO_PAGES_SQL_PATH}`);
+
+  let created = 0, skipped = 0;
+  for (const r of rows) {
+    const [
+      id, pageTitle, slugCol, shortContent, content, images, metaKeyword,
+      metaDescription, status, createdOn, updatedOn, h1Tag, parent, author, robots, metaTitle,
+    ] = r;
+    const slug = slugCol || slugify(pageTitle);
+
+    if (DRY_RUN) {
+      console.log(`  #${id} "${pageTitle}" -> slug=${slug}, status=${status}`);
+      continue;
+    }
+
+    const exists = await TempoSeoPage.findOne({ pageSlug: slug });
+    if (exists) { skipped++; continue; }
+
+    await TempoSeoPage.create({
+      pageName: cleanMojibake(pageTitle),
+      pageSlug: slug,
+      metaTitle: cleanMojibake(metaTitle) || pageTitle,
+      metaKeywords: metaKeyword || undefined,
+      metaDescription: cleanMojibake(metaDescription) || pageTitle,
+      h1Tag: cleanMojibake(h1Tag) || undefined,
+      sortContent: cleanMojibake(shortContent) || undefined,
+      content: cleanMojibake(content) || undefined,
+      author: author || undefined,
+      robots: robots || 'index, follow',
+      isActive: status === '1',
+    });
+    created++;
+  }
+  if (!DRY_RUN) console.log(`[tempo_pages] created ${created}, skipped ${skipped} (already existed)`);
+}
+
 (async () => {
   try {
     if (!DRY_RUN) await connectDB();
-    await importBlogs();
-    await importPages();
+    // Each source file is independent — a previously-consumed/missing one
+    // (e.g. tbl_pages.sql, already imported earlier) shouldn't block the
+    // others from running.
+    if (fs.existsSync(BLOG_SQL_PATH)) await importBlogs();
+    else console.log(`\n[blog] skipped — ${BLOG_SQL_PATH} not found`);
+    if (fs.existsSync(PAGES_SQL_PATH)) await importPages();
+    else console.log(`\n[tbl_pages] skipped — ${PAGES_SQL_PATH} not found`);
+    if (fs.existsSync(TEMPO_PAGES_SQL_PATH)) await importTempoPages();
+    else console.log(`\n[tempo_pages] skipped — ${TEMPO_PAGES_SQL_PATH} not found`);
   } catch (err) {
     console.error('Import failed:', err);
     process.exitCode = 1;

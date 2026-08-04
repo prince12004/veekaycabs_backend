@@ -134,6 +134,18 @@ router.get('/tempo-seo-pages', async (req, res) => {
   }
 });
 
+// GET /api/public/tempo-seo-pages/:slug — full page (content included), used
+// by the /tempo-traveller/[slug] fallback when the slug isn't a real vehicle.
+router.get('/tempo-seo-pages/:slug', async (req, res) => {
+  try {
+    const page = await TempoSeoPage.findOne({ pageSlug: req.params.slug, isActive: true });
+    if (!page) return res.status(404).json({ success: false, message: 'Page not found' });
+    return res.json({ success: true, data: page });
+  } catch (e) {
+    return res.status(500).json({ success: false, message: 'Failed' });
+  }
+});
+
 router.get('/pages/:key', async (req, res) => {
   try {
     const page = await PolicyPage.findOne({ pageKey: req.params.key });

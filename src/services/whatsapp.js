@@ -111,11 +111,13 @@ const sendBookingConfirmedToUser = async (user, booking, car) => {
 };
 
 // ─── Template 1b — Booking Confirmed V2 (User) ────────────────────────────────
-// Campaign: vk_booking_confirmed_v2 — approved 11-field version (confirmed
-// against the live NeoDove template body on 2026-07-04).
-// {{1}} name  {{2}} booking_id  {{3}} car  {{4}} pickup  {{5}} return
-// {{6}} location  {{7}} base_fare  {{8}} security_deposit  {{9}} total
-// {{10}} paid  {{11}} balance_due
+// This is a pre-approved WhatsApp template with a fixed 11-slot body — there's
+// no slot for a separate "GST" line, and adding one means submitting a new
+// template for Meta/AiSensy approval (a dashboard change, not a code change).
+// Until that exists, GST is folded into {{7}} "Base Fare" so the numbers the
+// customer sees actually add up (base_fare + security_deposit = total) —
+// previously this showed the pre-GST fare alone, so total looked ₹unexplained
+// higher than base_fare + security_deposit.
 const sendBookingConfirmedV2ToUser = async (user, booking, car) => {
   return sendTemplateMessage(user.mobile, 'vk_booking_confirmed_v2', [
     user.name || 'Customer',
@@ -124,7 +126,7 @@ const sendBookingConfirmedV2ToUser = async (user, booking, car) => {
     fmtDate(booking.startTime),
     fmtDate(booking.endTime),
     booking.deliveryAddress || booking.pickupLocation || 'Our Office',
-    fmtAmount(booking.bookingFare),
+    fmtAmount((booking.bookingFare || 0) + (booking.gst || 0)),
     fmtAmount(booking.securityDeposit),
     fmtAmount(booking.totalAmount),
     fmtAmount(booking.amountPaid),

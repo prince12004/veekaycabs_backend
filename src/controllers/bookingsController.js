@@ -24,6 +24,8 @@ const calculateCouponDiscount = (coupon, bookingFare) => {
   return Math.min(coupon.discountValue, bookingFare);
 };
 
+const GST_RATE = 0.12;
+
 const calculateFare = (car, startTime, endTime, doorstepDelivery = false, coupon = null, cityDeliveryCharge = 500) => {
   const hours = Math.ceil((new Date(endTime) - new Date(startTime)) / (1000 * 60 * 60));
   const isWeekend = [0, 6].includes(new Date(startTime).getDay());
@@ -31,10 +33,13 @@ const calculateFare = (car, startTime, endTime, doorstepDelivery = false, coupon
   const bookingFare = hours * rate;
   const doorstepCharge = doorstepDelivery ? (cityDeliveryCharge || 500) : 0;
   const discountAmount = coupon ? Math.round(calculateCouponDiscount(coupon, bookingFare)) : 0;
-  const totalAmount = bookingFare + doorstepCharge - discountAmount + car.securityDeposit;
+  // GST applies to the taxable rental fare after any coupon discount —
+  // doorstep charges and the refundable security deposit aren't taxed here.
+  const gst = Math.round((bookingFare - discountAmount) * GST_RATE);
+  const totalAmount = bookingFare + gst + doorstepCharge - discountAmount + car.securityDeposit;
   const tokenAmount = Math.round(totalAmount * 0.25);
   const balanceDue = totalAmount - tokenAmount;
-  return { hours, rate, bookingFare, doorstepCharge, discountAmount, totalAmount, tokenAmount, balanceDue };
+  return { hours, rate, bookingFare, gst, doorstepCharge, discountAmount, totalAmount, tokenAmount, balanceDue };
 };
 
 // POST /api/bookings/create
@@ -150,6 +155,7 @@ const createBooking = async (req, res) => {
       doorstepCharge: fare.doorstepCharge,
       bookingFare: fare.bookingFare,
       securityDeposit: car.securityDeposit,
+      gst: fare.gst,
       discount: fare.discountAmount,
       totalAmount: fare.totalAmount,
       tokenAmount: fare.tokenAmount,
@@ -295,7 +301,7 @@ const extendBooking = async (req, res) => {
     const isWeekend = [0, 6].includes(booking.endTime.getDay());
     const rate = isWeekend ? car.weekendPrice : car.regularPrice;
     const extraFare = extraHours * rate;
-    const extraGst = Math.round(extraFare * 0.18);
+    const extraGst = Math.round(extraFare * GST_RATE);
     const extensionCost = extraFare + extraGst;
 
     let razorpayOrderId;
