@@ -771,6 +771,11 @@ const closeBooking = async (req, res) => {
     const advancePaid = booking.amountPaid || 0;
     const settlementAmount = totalCharges - advancePaid;
 
+    // Re-closing an already-closed booking (e.g. correcting a meter reading)
+    // must not silently wipe a refund that was already marked paid.
+    const existingRefundPaid = booking.closingBill?.refundPaid || false;
+    const existingRefundPaidAt = booking.closingBill?.refundPaidAt;
+
     booking.odometerEnd = num(closingMeter);
     booking.extraKmCharge = extraKmCharge;
     booking.status = 'completed';
@@ -782,7 +787,8 @@ const closeBooking = async (req, res) => {
       totalCharges, advancePaid, settlementAmount,
       notes: notes || '',
       closedAt: new Date(),
-      refundPaid: false,
+      refundPaid: existingRefundPaid,
+      refundPaidAt: existingRefundPaidAt,
     };
 
     await booking.save();

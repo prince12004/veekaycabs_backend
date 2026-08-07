@@ -7,8 +7,6 @@ const { getLiveLocations, isConfigured, getAddress } = require('../../services/g
 
 router.use(protectAdmin);
 
-// A car counts as "online" if moving, "idle" if stationary but recently
-// heard from, and "offline" if the device hasn't reported in a while.
 const IDLE_THRESHOLD_MINUTES = 30;
 
 // GET /api/admin/gps/live — live location/status for every car with a GPS device fitted

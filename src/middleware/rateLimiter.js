@@ -9,8 +9,6 @@ const otpLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// General API: 5 lakh users → allow generous per-IP budget
-// Most users hit 10-30 requests/session; bots get blocked by burst pattern
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 500,   // increased from 200 — supports high concurrent real users
