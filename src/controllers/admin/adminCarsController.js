@@ -3,8 +3,6 @@ const { getFileUrl } = require('../../middleware/upload');
 
 const EXPIRY_ALERT_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 
-// Shared by getAllCars' expiryAlert=true filter and getCarStats' badge count,
-// so the tile count and the filtered list can never drift apart.
 const expiryAlertCondition = () => ({
   isActive: true,
   $or: [
@@ -200,6 +198,52 @@ const updateCar = async (req, res) => {
   }
 };
 
+// PATCH /api/admin/cars/bulk-price — update pricing fields for every car
+// matching a given model name and/or type in one shot, instead of editing
+// each car individually.
+const bulkUpdatePrice = async (req, res) => {
+  try {
+    const { name, type, regularPrice, weekendPrice, extraKmRate, securityDeposit, doorstepDeliveryCharge } = req.body;
+    if (!name && !type) {
+      return res.status(400).json({ success: false, message: 'Select a car name or type to update' });
+    }
+
+    const filter = { isDeleted: { $ne: true } };
+    if (name) filter.name = name;
+    if (type) filter.type = type;
+
+    const updates = {};
+    [
+      ['regularPrice', regularPrice],
+      ['weekendPrice', weekendPrice],
+      ['extraKmRate', extraKmRate],
+      ['securityDeposit', securityDeposit],
+      ['doorstepDeliveryCharge', doorstepDeliveryCharge],
+    ].forEach(([field, value]) => {
+      if (value !== undefined && value !== '') updates[field] = Number(value);
+    });
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ success: false, message: 'Enter at least one price field to update' });
+    }
+
+    const matchedCount = await Car.countDocuments(filter);
+    if (matchedCount === 0) {
+      return res.status(404).json({ success: false, message: 'No cars match that name/type' });
+    }
+
+    const result = await Car.updateMany(filter, { $set: updates }, { runValidators: true });
+    return res.json({
+      success: true,
+      matched: result.matchedCount,
+      modified: result.modifiedCount,
+      updates,
+    });
+  } catch (error) {
+    console.error('admin bulkUpdatePrice error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to bulk update prices' });
+  }
+};
+
 // DELETE /api/admin/cars/:id — soft delete: hides it from the admin list and
 // public site. Distinct from Deactivate (isActive alone), and clears any
 // scheduled inactivePeriod so the every-minute cron can't flip isActive back
@@ -391,4 +435,4 @@ const uploadCarDocument = async (req, res) => {
   }
 };
 
-module.exports = { getAllCars, getCarStats, getCarById, createCar, updateCar, deleteCar, toggleCarStatus, getExpiryAlerts, uploadCarDocument };
+module.exports = { getAllCars, getCarStats, getCarById, createCar, updateCar, deleteCar, toggleCarStatus, getExpiryAlerts, uploadCarDocument, bulkUpdatePrice };

@@ -10,6 +10,7 @@ const {
   toggleCarStatus,
   getExpiryAlerts,
   uploadCarDocument,
+  bulkUpdatePrice,
 } = require('../../controllers/admin/adminCarsController');
 const { verifyCarRC, checkCarChallan } = require('../../controllers/admin/adminVehicleVerificationController');
 const { protectAdmin, requirePermission } = require('../../middleware/adminAuth');
@@ -19,6 +20,7 @@ router.use(protectAdmin);
 
 router.get('/expiry-alerts', getExpiryAlerts);
 router.get('/stats', getCarStats);
+router.patch('/bulk-price', requirePermission('carListing', 'edit'), bulkUpdatePrice);
 router.get('/', getAllCars);
 router.get('/:id', getCarById);
 router.post('/', requirePermission('addCar', 'view'), getUploader('cars').array('images', 10), createCar);
