@@ -279,7 +279,7 @@ const getSettlementsReport = async (req, res) => {
 
     const [bookings, statusAgg, closedCount] = await Promise.all([
       Booking.find({ ...notDeleted, ...dateFilter, status: { $ne: 'cancelled' } })
-        .select('bookingId userId carId status totalAmount amountPaid balanceDue closingBill')
+        .select('bookingId userId carId status totalAmount amountPaid balanceDue closingBill bookedBy')
         .populate('userId', 'name mobile')
         .populate('carId', 'name registrationNo')
         .sort({ createdAt: -1 }),
@@ -309,6 +309,7 @@ const getSettlementsReport = async (req, res) => {
         regNo: b.carId?.registrationNo || '',
         status: b.status,
         closed: isClosed,
+        bookedBy: b.bookedBy || '',
       };
       if (isClosed) {
         const amount = b.closingBill.settlementAmount || 0;
