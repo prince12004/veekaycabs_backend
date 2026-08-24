@@ -1,8 +1,5 @@
 const mongoose = require('mongoose');
 
-// SEO landing pages for self-drive car rental content (imported from the old
-// site's `tbl_pages` MySQL table). Mirrors the shape of TempoSeoPage, which
-// is the equivalent for tempo-traveller content.
 const CarSeoPageSchema = new mongoose.Schema({
   pageName: { type: String, required: true, trim: true },
   pageSlug: { type: String, required: true, unique: true },
