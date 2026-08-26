@@ -2,10 +2,6 @@ const Car = require('../../models/Car');
 const VehicleCheck = require('../../models/VehicleCheck');
 const { isQuickEkycConfigured, isSurepassConfigured, isRcConfigured, verifyRC, checkChallan } = require('../../services/quickekyc');
 
-// Normalizes a QuickEKYC RC Special v1 response (POST /rc/rc_special_v1) into
-// our schema. Also handles Surepass field names as fallback.
-// Handles both QuickEKYC (vehicle_chasi_number / maker_model) and Surepass
-// (chassis_number / maker_model) field naming variations.
 const parseDate = (d) => {
   if (!d) return null;
   // QuickEKYC returns dates as "DD-MM-YYYY" strings
@@ -49,10 +45,6 @@ const normalizeRcResult = (apiData) => ({
   error: undefined,
 });
 
-// Normalizes a QuickEKYC Challan response (POST /challan/challan) into our
-// schema. Field names confirmed from a live response: owner_name (top-level),
-// challan_no, challan_time (full date+time), challan_status, challan_place,
-// challan_info (offense description), challan_amount.
 const normalizeChallanResult = (apiData) => {
   const rawList = apiData?.challan_data || [];
   const challans = (Array.isArray(rawList) ? rawList : []).map((c) => ({
