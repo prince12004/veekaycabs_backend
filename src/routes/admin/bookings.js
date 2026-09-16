@@ -28,7 +28,7 @@ const {
   getBookingUserDocs,
   sendCarDocsWhatsApp,
 } = require('../../controllers/admin/adminBookingMediaController');
-const { protectAdmin, requirePermission, requireAnyPermission } = require('../../middleware/adminAuth');
+const { protectAdmin, requirePermission, requireAnyPermission, superAdminOnly } = require('../../middleware/adminAuth');
 const { getUploader } = require('../../middleware/upload');
 
 router.use(protectAdmin);
@@ -64,7 +64,9 @@ router.patch('/:id/close', editEither, closeBooking);
 router.patch('/:id/extend', extendEither, extendBooking);
 router.patch('/:id/refund-paid', editEither, markRefundPaid);
 router.post('/:id/payments', editEither, getUploader('payment-proofs').single('screenshot'), addBookingPayment);
-router.delete('/:id/payments/:paymentId', editEither, deleteBookingPayment);
+// Deleting a payment entry reverses money out of amountPaid — restricted to
+// Super Admin only, not delegable via the normal booking-edit permission.
+router.delete('/:id/payments/:paymentId', superAdminOnly, deleteBookingPayment);
 router.put('/:id', editEither, updateBooking);
 router.delete('/:id', deleteEither, deleteBooking);
 

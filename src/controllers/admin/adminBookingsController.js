@@ -831,11 +831,14 @@ const addBookingPayment = async (req, res) => {
     if (!amount || isNaN(numAmount) || numAmount <= 0) {
       return res.status(400).json({ success: false, message: 'Enter a valid payment amount' });
     }
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Payment screenshot is required' });
+    }
 
     const booking = await Booking.findById(req.params.id);
     if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
 
-    const screenshotUrl = req.file ? getFileUrl(req.file) : undefined;
+    const screenshotUrl = getFileUrl(req.file);
     const paymentDate = date && !isNaN(new Date(date).getTime()) ? new Date(date) : new Date();
 
     booking.payments.push({
