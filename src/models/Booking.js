@@ -20,6 +20,14 @@ const BookingSchema = new mongoose.Schema({
   tokenAmount: { type: Number, required: true },
   balanceDue: { type: Number, required: true },
   amountPaid: { type: Number, default: 0 },
+  payments: [{
+    amount: { type: Number, required: true },
+    date: { type: Date, default: Date.now },
+    mode: { type: String, default: 'upi' },
+    screenshotUrl: { type: String },
+    note: { type: String },
+    recordedAt: { type: Date, default: Date.now },
+  }],
   paymentMode: {
     type: String,
     enum: ['online', 'offline_cash', 'offline_qr'],

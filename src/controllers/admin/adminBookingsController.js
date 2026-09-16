@@ -824,6 +824,70 @@ const markRefundPaid = async (req, res) => {
   }
 };
 
+const addBookingPayment = async (req, res) => {
+  try {
+    const { amount, mode, date, note } = req.body;
+    const numAmount = Number(amount);
+    if (!amount || isNaN(numAmount) || numAmount <= 0) {
+      return res.status(400).json({ success: false, message: 'Enter a valid payment amount' });
+    }
+
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+
+    const screenshotUrl = req.file ? getFileUrl(req.file) : undefined;
+    const paymentDate = date && !isNaN(new Date(date).getTime()) ? new Date(date) : new Date();
+
+    booking.payments.push({
+      amount: numAmount,
+      date: paymentDate,
+      mode: mode || 'upi',
+      screenshotUrl,
+      note: note || '',
+    });
+    booking.amountPaid = (booking.amountPaid || 0) + numAmount;
+    booking.balanceDue = (booking.totalAmount || 0) - booking.amountPaid;
+    await booking.save();
+
+    const populated = await Booking.findById(booking._id)
+      .populate('userId', 'name mobile email')
+      .populate('carId', 'name registrationNo type regularPrice weekendPrice')
+      .populate('cityId', 'name');
+
+    return res.json({ success: true, data: populated });
+  } catch (error) {
+    console.error('admin addBookingPayment error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to record payment' });
+  }
+};
+
+// DELETE /api/admin/bookings/:id/payments/:paymentId — undo a mis-entered
+// payment record, reversing it out of amountPaid/balanceDue.
+const deleteBookingPayment = async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+
+    const payment = booking.payments.id(req.params.paymentId);
+    if (!payment) return res.status(404).json({ success: false, message: 'Payment entry not found' });
+
+    booking.amountPaid = Math.max(0, (booking.amountPaid || 0) - payment.amount);
+    booking.balanceDue = (booking.totalAmount || 0) - booking.amountPaid;
+    payment.deleteOne();
+    await booking.save();
+
+    const populated = await Booking.findById(booking._id)
+      .populate('userId', 'name mobile email')
+      .populate('carId', 'name registrationNo type regularPrice weekendPrice')
+      .populate('cityId', 'name');
+
+    return res.json({ success: true, data: populated });
+  } catch (error) {
+    console.error('admin deleteBookingPayment error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to remove payment' });
+  }
+};
+
 // POST /api/admin/bookings/:id/closing-bill/send-whatsapp — upload closing-bill PDF + send via WhatsApp
 const sendClosingBillWhatsApp = async (req, res) => {
   try {
@@ -886,4 +950,4 @@ const sendInvoiceWhatsApp = async (req, res) => {
   }
 };
 
-module.exports = { getAllBookings, getSchedule, getClosingBills, getBookingDetail, createOfflineBooking, exportBookings, updateBookingStatus, updateBooking, extendBooking, deleteBooking, updateVehicleVerification, sendInvoiceWhatsApp, closeBooking, markRefundPaid, sendClosingBillWhatsApp };
+module.exports = { getAllBookings, getSchedule, getClosingBills, getBookingDetail, createOfflineBooking, exportBookings, updateBookingStatus, updateBooking, extendBooking, deleteBooking, updateVehicleVerification, sendInvoiceWhatsApp, closeBooking, markRefundPaid, sendClosingBillWhatsApp, addBookingPayment, deleteBookingPayment };

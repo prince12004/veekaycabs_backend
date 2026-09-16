@@ -16,6 +16,8 @@ const {
   closeBooking,
   markRefundPaid,
   sendClosingBillWhatsApp,
+  addBookingPayment,
+  deleteBookingPayment,
 } = require('../../controllers/admin/adminBookingsController');
 const {
   uploadBookingMedia,
@@ -61,6 +63,8 @@ router.patch('/:id/verification', editEither, updateVehicleVerification);
 router.patch('/:id/close', editEither, closeBooking);
 router.patch('/:id/extend', extendEither, extendBooking);
 router.patch('/:id/refund-paid', editEither, markRefundPaid);
+router.post('/:id/payments', editEither, getUploader('payment-proofs').single('screenshot'), addBookingPayment);
+router.delete('/:id/payments/:paymentId', editEither, deleteBookingPayment);
 router.put('/:id', editEither, updateBooking);
 router.delete('/:id', deleteEither, deleteBooking);
 
