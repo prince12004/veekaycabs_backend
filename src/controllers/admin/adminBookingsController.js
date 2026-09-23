@@ -281,6 +281,12 @@ const createOfflineBooking = async (req, res) => {
     if (doorstepDelivery && !String(deliveryAddress || '').trim()) {
       return res.status(400).json({ success: false, message: 'Delivery address is required for pickup & drop' });
     }
+    // Any amount collected at booking time needs proof — same rule as adding
+    // a payment later via addBookingPayment, applied here too so an initial
+    // advance can't be recorded without a screenshot either.
+    if (Number(amountPaid) > 0 && !req.file) {
+      return res.status(400).json({ success: false, message: 'Payment screenshot is required when an amount has been received' });
+    }
 
     const hours = Math.ceil((end - start) / (1000 * 60 * 60));
     const isWeekend = [0, 6].includes(start.getDay());
@@ -317,6 +323,15 @@ const createOfflineBooking = async (req, res) => {
     }
 
     const bookingId = generateBookingId();
+    const initialPayment = Number(amountPaid) > 0
+      ? [{
+          amount: Number(amountPaid),
+          date: new Date(),
+          mode: paymentMode === 'offline_qr' ? 'upi' : paymentMode === 'offline_cash' ? 'cash' : 'upi',
+          screenshotUrl: getFileUrl(req.file),
+          note: 'Collected at booking creation',
+        }]
+      : [];
     const booking = await Booking.create({
       bookingId,
       userId: resolvedUserId,
@@ -336,6 +351,7 @@ const createOfflineBooking = async (req, res) => {
       tokenAmount,
       balanceDue,
       amountPaid,
+      payments: initialPayment,
       paymentMode,
       status: 'confirmed',
       isOffline: true,

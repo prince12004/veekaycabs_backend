@@ -56,7 +56,7 @@ router.get('/export', exportBookings);
 router.get('/schedule', getSchedule);
 router.get('/closing-bills', getClosingBills);
 router.get('/', getAllBookings);
-router.post('/offline', requirePermission('offlineBooking', 'add'), createOfflineBooking);
+router.post('/offline', requirePermission('offlineBooking', 'add'), getUploader('payment-proofs').single('screenshot'), createOfflineBooking);
 router.get('/:id', getBookingDetail);
 router.patch('/:id/status', editEither, updateBookingStatus);
 router.patch('/:id/verification', editEither, updateVehicleVerification);
