@@ -229,12 +229,16 @@ const createOfflineBooking = async (req, res) => {
   try {
     const {
       userId, carId, startTime, endTime, pickupLocation,
-      paymentMode = 'offline_cash', doorstepDelivery = false, deliveryAddress,
+      paymentMode = 'offline_cash', deliveryAddress,
       bookedBy,
       amountPaid = 0, notes,
       bookingFare: bookingFareOverride, securityDeposit: securityDepositOverride,
       doorstepCharge: doorstepChargeOverride, gstPercent = 0,
     } = req.body;
+    // Sent as a stringified value over multipart/form-data (needed for the
+    // payment-screenshot file upload) — the string "false" is truthy in JS,
+    // so it must be parsed explicitly instead of trusted as a boolean.
+    const doorstepDelivery = req.body.doorstepDelivery === true || req.body.doorstepDelivery === 'true';
 
     if (!carId || !startTime || !endTime || !pickupLocation) {
       return res.status(400).json({
