@@ -10,11 +10,6 @@ const startServer = async () => {
   await connectDB();
   await connectRedis();
 
-  // Cron: Every 30 min — mark overdue bookings as completed. Covers
-  // 'confirmed' too, not just 'active' — a booking the admin never manually
-  // marked active/closed used to sit as 'confirmed' forever, which kept
-  // blocking that car's dates in the availability search long after the
-  // rental period actually ended.
   cron.schedule('*/30 * * * *', async () => {
     try {
       const Booking = require('./models/Booking');
