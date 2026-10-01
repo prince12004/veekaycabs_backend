@@ -24,7 +24,7 @@ const calculateCouponDiscount = (coupon, bookingFare) => {
   return Math.min(coupon.discountValue, bookingFare);
 };
 
-const GST_RATE = 0.12;
+const GST_RATE = 0.05;
 
 const calculateFare = (car, startTime, endTime, doorstepDelivery = false, coupon = null, cityDeliveryCharge = 500) => {
   const hours = Math.ceil((new Date(endTime) - new Date(startTime)) / (1000 * 60 * 60));
