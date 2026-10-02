@@ -651,9 +651,16 @@ const extendBooking = async (req, res) => {
     const extraAmount = hasOverride ? Number(extraAmountOverride) : defaultExtraAmount;
     const extraPaid = Number(additionalPaymentReceived) || 0;
 
+    // Apply GST on the extra rent at whatever rate this booking was already
+    // charged (gst / bookingFare) — previously an extension added no GST at
+    // all, even when the original booking was GST-inclusive.
+    const effectiveGstRate = booking.bookingFare > 0 ? (booking.gst || 0) / booking.bookingFare : 0;
+    const extraGst = Math.round(extraAmount * effectiveGstRate);
+
     booking.endTime = newEnd;
     booking.bookingFare = (booking.bookingFare || 0) + extraAmount;
-    booking.totalAmount = (booking.totalAmount || 0) + extraAmount;
+    booking.gst = (booking.gst || 0) + extraGst;
+    booking.totalAmount = (booking.totalAmount || 0) + extraAmount + extraGst;
     booking.amountPaid = (booking.amountPaid || 0) + extraPaid;
     booking.balanceDue = booking.totalAmount - booking.amountPaid;
     await booking.save();
@@ -663,10 +670,13 @@ const extendBooking = async (req, res) => {
       .populate('carId', 'name registrationNo type')
       .populate('cityId', 'name');
 
+    const extraTotal = extraAmount + extraGst;
     return res.json({
       success: true,
       data: populated,
-      message: `Booking extended by ${extraHours}h — Rs. ${extraAmount.toLocaleString('en-IN')} added`,
+      message: extraGst > 0
+        ? `Booking extended by ${extraHours}h — Rs. ${extraAmount.toLocaleString('en-IN')} + Rs. ${extraGst.toLocaleString('en-IN')} GST = Rs. ${extraTotal.toLocaleString('en-IN')} added`
+        : `Booking extended by ${extraHours}h — Rs. ${extraAmount.toLocaleString('en-IN')} added`,
     });
   } catch (error) {
     console.error('admin extendBooking error:', error);
