@@ -836,6 +836,12 @@ const closeBooking = async (req, res) => {
     booking.odometerEnd = num(closingMeter);
     booking.extraKmCharge = extraKmCharge;
     booking.status = 'completed';
+    // Keep the canonical balanceDue field (used by the main Bookings list and
+    // every other balance display) in sync with the closing-bill settlement —
+    // without this, closing a booking with extra charges/late fees/a discount
+    // would leave the list showing the stale pre-closing due amount. Can go
+    // negative, meaning a refund is owed to the customer.
+    booking.balanceDue = settlementAmount;
     booking.closingBill = {
       totalKms, kmsLimit: limit, extraKms, extraKmRate: effectiveExtraKmRate,
       actualReturnTime: returnTime && !isNaN(returnTime) ? returnTime : undefined,
