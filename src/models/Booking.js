@@ -95,6 +95,11 @@ const BookingSchema = new mongoose.Schema({
     fuelCharges: { type: Number, default: 0 },
     damageCharges: { type: Number, default: 0 },
     washingCharges: { type: Number, default: 0 },
+    // Goodwill/negotiated discount applied at closing time — distinct from
+    // the booking-level `discount` (set once from a coupon at creation).
+    discountType: { type: String, enum: ['percentage', 'fixed'], default: 'fixed' },
+    discountValue: { type: Number, default: 0 }, // raw input: a % (0-100) or a rupee amount, per discountType
+    discountAmount: { type: Number, default: 0 }, // resolved rupee amount actually deducted, capped to bookingFare
     totalCharges: { type: Number },
     advancePaid: { type: Number },
     // positive = customer owes this; negative = refund owed to customer

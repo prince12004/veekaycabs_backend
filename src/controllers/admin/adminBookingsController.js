@@ -743,6 +743,7 @@ const closeBooking = async (req, res) => {
     const {
       startingMeter, closingMeter, kmsLimit, extraKmRate, actualReturnTime, lateHourRate,
       pickupCharges, dropCharges, fastagStateTax, allStateChallan, overspeedingFine, fuelCharges, damageCharges, washingCharges, notes,
+      discountType, discountValue,
     } = req.body;
 
     const num = (v) => (v === undefined || v === '' || v === null ? 0 : Number(v));
@@ -794,10 +795,36 @@ const closeBooking = async (req, res) => {
     };
     const extraChargesTotal = Object.values(charges).reduce((a, b) => a + b, 0);
 
+    // Closing-time discount — a goodwill/negotiated discount the admin can
+    // apply when closing the booking, separate from any coupon discount
+    // already applied at creation (booking.discount). Only ever discounts
+    // the original rental fare, never the SLA/extra charges above.
+    const rentalAmount = booking.bookingFare || 0;
+    const effectiveDiscountType = discountType === 'percentage' ? 'percentage' : 'fixed';
+    const rawDiscountValue = num(discountValue);
+    if (rawDiscountValue < 0) {
+      return res.status(400).json({ success: false, message: 'Discount value cannot be negative' });
+    }
+    let discountAmount = 0;
+    if (effectiveDiscountType === 'percentage') {
+      if (rawDiscountValue > 100) {
+        return res.status(400).json({ success: false, message: 'Discount percentage cannot exceed 100%' });
+      }
+      discountAmount = Math.round((rentalAmount * rawDiscountValue) / 100);
+    } else {
+      discountAmount = Math.round(rawDiscountValue);
+    }
+    if (discountAmount > rentalAmount) {
+      return res.status(400).json({ success: false, message: 'Discount cannot exceed the rental amount' });
+    }
+
     const totalCharges = Math.round(
-      (booking.bookingFare || 0) + (booking.gst || 0) - (booking.discount || 0) +
+      (booking.bookingFare || 0) + (booking.gst || 0) - (booking.discount || 0) - discountAmount +
       (booking.doorstepCharge || 0) + extraKmCharge + lateCharges + extraChargesTotal
     );
+    if (totalCharges < 0) {
+      return res.status(400).json({ success: false, message: 'Final payable amount cannot be negative — reduce the discount' });
+    }
     const advancePaid = booking.amountPaid || 0;
     const settlementAmount = totalCharges - advancePaid;
 
@@ -814,6 +841,7 @@ const closeBooking = async (req, res) => {
       actualReturnTime: returnTime && !isNaN(returnTime) ? returnTime : undefined,
       lateHours, lateHourRate: effectiveLateHourRate, lateCharges,
       ...charges,
+      discountType: effectiveDiscountType, discountValue: rawDiscountValue, discountAmount,
       totalCharges, advancePaid, settlementAmount,
       notes: notes || '',
       closedAt: new Date(),
