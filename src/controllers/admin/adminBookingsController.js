@@ -4,6 +4,8 @@ const User = require('../../models/User');
 const { v4: uuidv4 } = require('uuid');
 const { sendBookingConfirmedV2ToUser, notifyAdminNewBooking, sendBookingCancelledToUser, sendBookingInvoiceToUser, sendClosingBillToUser } = require('../../services/whatsapp');
 const { getFileUrl } = require('../../middleware/upload');
+const { buildBookedByCondition } = require('../../utils/bookedBy');
+const { startOfDay, endOfDay } = require('../../utils/dateRange');
 
 const generateBookingId = () => {
   const ts = Date.now().toString().slice(-6);
@@ -141,7 +143,7 @@ const getClosingBills = async (req, res) => {
 // GET /api/admin/bookings
 const getAllBookings = async (req, res) => {
   try {
-    const { status, city, from, to, page = 1, limit = 20, search, isOffline } = req.query;
+    const { status, city, from, to, page = 1, limit = 20, search, isOffline, bookedBy } = req.query;
     const filter = { isDeleted: { $ne: true } };
 
     if (status) filter.status = status;
@@ -150,9 +152,10 @@ const getAllBookings = async (req, res) => {
     if (isOffline === 'false') filter.isOffline = { $ne: true };
     if (from || to) {
       filter.createdAt = {};
-      if (from) filter.createdAt.$gte = new Date(from);
-      if (to) filter.createdAt.$lte = new Date(to);
+      if (from) filter.createdAt.$gte = startOfDay(from);
+      if (to) filter.createdAt.$lte = endOfDay(to);
     }
+    if (bookedBy) filter.bookedBy = await buildBookedByCondition(bookedBy);
     if (search) {
       // bookingId lives on Booking itself, but car reg. no. / name and
       // customer name / mobile live on referenced collections — resolve

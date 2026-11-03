@@ -1,4 +1,9 @@
 const TempoSeoPage = require('../../models/TempoSeoPage');
+const { sanitizeContent } = require('../../utils/sanitizeHtml');
+
+// Partial updates (e.g. toggling isActive) may not include content at all.
+const withSanitizedContent = (body) =>
+  body.content === undefined ? body : { ...body, content: sanitizeContent(body.content) };
 
 exports.getAllSeoPages = async (req, res) => {
   try {
@@ -33,7 +38,7 @@ exports.createSeoPage = async (req, res) => {
   try {
     const { pageName, pageSlug, metaTitle, metaKeywords, metaDescription, h1Tag, author, robots, sortContent, content } = req.body;
     const slug = pageSlug || pageName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-    const page = new TempoSeoPage({ pageName, pageSlug: slug, metaTitle, metaKeywords, metaDescription, h1Tag, author, robots, sortContent, content });
+    const page = new TempoSeoPage({ pageName, pageSlug: slug, metaTitle, metaKeywords, metaDescription, h1Tag, author, robots, sortContent, content: sanitizeContent(content) });
     await page.save();
     res.status(201).json({ success: true, data: page, message: 'SEO page created' });
   } catch (err) {
@@ -44,7 +49,7 @@ exports.createSeoPage = async (req, res) => {
 
 exports.updateSeoPage = async (req, res) => {
   try {
-    const page = await TempoSeoPage.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const page = await TempoSeoPage.findByIdAndUpdate(req.params.id, withSanitizedContent(req.body), { new: true });
     if (!page) return res.status(404).json({ success: false, message: 'Page not found' });
     res.json({ success: true, data: page, message: 'Page updated' });
   } catch (err) {

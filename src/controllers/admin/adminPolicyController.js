@@ -1,4 +1,5 @@
 const PolicyPage = require('../../models/PolicyPage');
+const { sanitizeContent } = require('../../utils/sanitizeHtml');
 
 const DEFAULTS = {
   about:        { title: 'About Us', content: '<h2>About Veekay Cabs</h2><p>We are Delhi NCR\'s most trusted self-drive car rental service.</p>' },
@@ -40,7 +41,7 @@ const upsertPage = async (req, res) => {
     if (!content) return res.status(400).json({ success: false, message: 'Content required' });
     const page = await PolicyPage.findOneAndUpdate(
       { pageKey: key },
-      { title: title || DEFAULTS[key]?.title || key, content, metaTitle, metaDesc, lastEditedBy: req.admin._id },
+      { title: title || DEFAULTS[key]?.title || key, content: sanitizeContent(content), metaTitle, metaDesc, lastEditedBy: req.admin._id },
       { new: true, upsert: true }
     );
     return res.json({ success: true, data: page, message: 'Page saved successfully' });

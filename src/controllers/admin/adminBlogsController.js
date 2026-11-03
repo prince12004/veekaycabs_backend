@@ -1,5 +1,6 @@
 const Blog = require('../../models/Blog');
 const { getFileUrl } = require('../../middleware/upload');
+const { sanitizeContent } = require('../../utils/sanitizeHtml');
 
 // GET /api/admin/blogs
 const getAllBlogs = async (req, res) => {
@@ -45,6 +46,7 @@ const deriveExcerpt = (html = '', max = 160) => {
 const createBlog = async (req, res) => {
   try {
     const { title, slug: customSlug, isPublished, excerpt, ...rest } = req.body;
+    rest.content = sanitizeContent(rest.content);
     const slug = customSlug ||
       title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') +
       '-' + Date.now().toString().slice(-4);
@@ -72,6 +74,7 @@ const createBlog = async (req, res) => {
 const updateBlog = async (req, res) => {
   try {
     const updates = { ...req.body };
+    if (updates.content !== undefined) updates.content = sanitizeContent(updates.content);
     if (req.file) {
       updates.coverImage = getFileUrl(req.file);
     }

@@ -1,6 +1,9 @@
 const Booking = require('../../models/Booking');
 const User = require('../../models/User');
 const Car = require('../../models/Car');
+const TeamMember = require('../../models/TeamMember');
+const { normalizeName, cleanDisplayName, buildMemberIndex } = require('../../utils/bookedBy');
+const { startOfDay, endOfDay } = require('../../utils/dateRange');
 
 // Shifting a UTC instant by the fixed IST offset means its UTC-getter
 // calendar fields (year/month) equal the true IST calendar date — the same
@@ -251,6 +254,71 @@ const getBookingStats = async (req, res) => {
   }
 };
 
+// GET /api/admin/reports/team-bookings?from=&to=
+// Bookings per team member by status, over the date each booking was created.
+// Every booking lands in exactly one row, so the rows always add up to overall:
+// variant spellings fold into their member, names with no member get their own
+// row, and bookings with no name go to `unassigned`.
+const getTeamBookingsReport = async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const match = { isDeleted: { $ne: true } };
+    if (from || to) {
+      match.createdAt = {};
+      if (from) match.createdAt.$gte = startOfDay(from);
+      if (to) match.createdAt.$lte = endOfDay(to);
+    }
+
+    const [grouped, members] = await Promise.all([
+      Booking.aggregate([
+        { $match: match },
+        { $group: { _id: { bookedBy: '$bookedBy', status: '$status' }, count: { $sum: 1 } } },
+        // Fixed order, so a name with several spellings always shows the same one.
+        { $sort: { '_id.bookedBy': 1 } },
+      ]),
+      TeamMember.find(),
+    ]);
+
+    const emptyCounts = () => ({ total: 0, pending: 0, confirmed: 0, active: 0, completed: 0, cancelled: 0 });
+    const add = (row, status, count) => {
+      row.total += count;
+      if (status in row) row[status] += count;
+    };
+
+    const index = buildMemberIndex(members);
+    const rows = new Map();
+    members
+      .filter((m) => !m.isDeleted)
+      .forEach((m) => rows.set(m.nameKey, { name: m.name, isMember: true, ...emptyCounts() }));
+    const unassigned = emptyCounts();
+    const overall = emptyCounts();
+
+    grouped.forEach(({ _id: { bookedBy, status }, count }) => {
+      add(overall, status, count);
+      const key = normalizeName(bookedBy);
+      if (!key) return add(unassigned, status, count);
+      const member = index.get(key);
+      const rowKey = member ? member.nameKey : key;
+      if (!rows.has(rowKey)) {
+        rows.set(rowKey, { name: member ? member.name : cleanDisplayName(bookedBy), isMember: false, ...emptyCounts() });
+      }
+      add(rows.get(rowKey), status, count);
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        rows: [...rows.values()].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name)),
+        unassigned,
+        overall,
+      },
+    });
+  } catch (error) {
+    console.error('admin getTeamBookingsReport error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to generate team bookings report' });
+  }
+};
+
 // GET /api/admin/reports/settlements?from=&to=
 // Full collection/refund exposure across ALL bookings (date range applies to
 // createdAt, same meaning throughout this report) — not just closed ones:
@@ -344,4 +412,4 @@ const getSettlementsReport = async (req, res) => {
   }
 };
 
-module.exports = { getRevenueReport, getBookingStats, getCarRevenueReport, getSettlementsReport };
+module.exports = { getRevenueReport, getBookingStats, getCarRevenueReport, getSettlementsReport, getTeamBookingsReport };

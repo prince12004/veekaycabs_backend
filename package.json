@@ -35,6 +35,7 @@
     "passport-google-oauth20": "^2.0.0",
     "razorpay": "^2.9.6",
     "redis": "^4.7.1",
+    "sanitize-html": "2.17.1",
     "uuid": "^9.0.1"
   },
   "devDependencies": {
