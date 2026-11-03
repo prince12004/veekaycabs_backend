@@ -20,7 +20,7 @@ const { normalizeName } = require('../utils/bookedBy');
 
 const REASSIGNMENTS = {
   'Akki Chauhan': ['Akki', 'Akki Chauhan', 'Akkii'],
-  'Vivek Singh': ['Vivek', 'Vivek Sir', 'Vivek Singh'],
+  'Vivek Singh': ['Vivek', 'Vivek Sir', 'Vivek Singh', 'Parking', 'Her'],
   'Anuj Bhardwaj': ['Anuj Bhardwaj', 'Bobby', 'Bobby Sir', 'Bobby Bhai', 'Boby Bhai', 'Booby'],
   'Anil Gupta': ['Anil', 'Anil Sir', 'Anil Gupta'],
   'Preeti Singh': ['Preeti', 'Preeti Singh'],

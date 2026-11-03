@@ -140,10 +140,18 @@ const getClosingBills = async (req, res) => {
   }
 };
 
+const countBookingsByStatus = async (filter) => {
+  const [pending, confirmed, active, completed, cancelled, dropOffs] = await Promise.all([
+    ...['pending', 'confirmed', 'active', 'completed', 'cancelled'].map((status) => Booking.countDocuments({ ...filter, status })),
+    Booking.countDocuments({ ...filter, status: 'pending', amountPaid: 0 }),
+  ]);
+  return { pending, confirmed, active, completed, cancelled, dropOffs };
+};
+
 // GET /api/admin/bookings
 const getAllBookings = async (req, res) => {
   try {
-    const { status, city, from, to, page = 1, limit = 20, search, isOffline, bookedBy } = req.query;
+    const { status, city, from, to, page = 1, limit = 20, search, isOffline, bookedBy, dropOffs, withCounts } = req.query;
     const filter = { isDeleted: { $ne: true } };
 
     if (status) filter.status = status;
@@ -172,7 +180,15 @@ const getAllBookings = async (req, res) => {
       ];
     }
 
-    const [total, bookings] = await Promise.all([
+    // The summary cards cover every booking matching the other filters, not
+    // just this page, and ignore the status picked so they don't zero each other.
+    const { status: _status, ...countFilter } = filter;
+    if (dropOffs === 'true') {
+      filter.status = 'pending';
+      filter.amountPaid = 0;
+    }
+
+    const [total, bookings, counts] = await Promise.all([
       Booking.countDocuments(filter),
       Booking.find(filter)
         .populate('userId', 'name mobile email')
@@ -181,6 +197,7 @@ const getAllBookings = async (req, res) => {
         .sort({ createdAt: -1 })
         .skip((parseInt(page) - 1) * parseInt(limit))
         .limit(parseInt(limit)),
+      withCounts === 'true' ? countBookingsByStatus(countFilter) : undefined,
     ]);
 
     return res.json({
@@ -189,6 +206,7 @@ const getAllBookings = async (req, res) => {
       total,
       page: parseInt(page),
       pages: Math.ceil(total / parseInt(limit)),
+      ...(counts ? { counts } : {}),
     });
   } catch (error) {
     console.error('admin getAllBookings error:', error);

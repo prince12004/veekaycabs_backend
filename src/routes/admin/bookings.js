@@ -37,7 +37,6 @@ router.use(protectAdmin);
 // SAME booking resource — an edit/delete here can't be attributed to one
 // page over the other, so either permission unlocks these shared actions.
 const editEither = requireAnyPermission([['allBookings', 'edit'], ['offlineBooking', 'edit']]);
-const deleteEither = requireAnyPermission([['allBookings', 'delete'], ['offlineBooking', 'delete']]);
 
 // A sub-admin can be handed just "upload verification images" or just
 // "extend booking" without full booking edit — full edit (editEither) always
@@ -68,7 +67,7 @@ router.post('/:id/payments', editEither, getUploader('payment-proofs').single('s
 // Super Admin only, not delegable via the normal booking-edit permission.
 router.delete('/:id/payments/:paymentId', superAdminOnly, deleteBookingPayment);
 router.put('/:id', editEither, updateBooking);
-router.delete('/:id', deleteEither, deleteBooking);
+router.delete('/:id', superAdminOnly, deleteBooking);
 
 // Media (video/photo) upload — up to 10 files per call
 router.post('/:id/media', uploadMediaEither, getUploader('booking-media').array('files', 10), uploadBookingMedia);
